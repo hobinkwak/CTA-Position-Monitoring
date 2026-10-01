@@ -2,6 +2,8 @@
 
 A dashboard that estimates how trend-following CTAs are positioned across 16 futures markets and what they would have to trade if prices move.
 
+**Live demo: https://hobinkwak.github.io/CTA-Position-Monitoring/**
+
 The positioning model follows Kestner (2020), ["Replicating CTA Positioning: An Improved Method"](https://ssrn.com/abstract=3674828): volatility-normalised momentum, capped and inverse-volatility weighted, from an ensemble of three parameter sets (momentum lookback in weeks / cap / volatility lookback in days: 16/1/60, 32/1/60, 52/1/60). The ensemble is scaled to match the SG Trend Index volatility. Everything outside the paper (scenario engine, trade pressure, flip prices, CFTC comparison) is an extension and is labelled as such in the dashboard.
 
 ## Dashboard tabs
