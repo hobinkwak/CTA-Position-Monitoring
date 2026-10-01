@@ -1,0 +1,3641 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ default_theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+{% if plotlyjs %}
+{# standalone: plotly.js is embedded in the file, so it opens without internet/CDN #}
+<script charset="utf-8">{{ plotlyjs | safe }}</script>
+{% else %}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+{% endif %}
+<style>
+  :root {
+    --surface:      #fcfcfb;
+    --page:         #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary:#52514e;
+    --muted:        #898781;
+    --gridline:     #e1e0d9;
+    --baseline:     #c3c2b7;
+    --border:       rgba(11,11,11,0.10);
+    --accent:       #043b72;
+    --warn-bg:      rgba(250,178,25,0.10);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --surface:      #1a1a19;
+    --page:         #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary:#c3c2b7;
+    --muted:        #898781;
+    --gridline:     #2c2c2a;
+    --baseline:     #383835;
+    --border:       rgba(255,255,255,0.10);
+    --accent:       #3b6fd0;
+    --warn-bg:      rgba(250,178,25,0.12);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  /* The `hidden` attribute works through the browser default style (display:none), but
+     an author rule such as `display: flex` takes precedence and disables it.
+     Force it here. */
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  a { color: var(--accent); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--page);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .shell { display: flex; align-items: flex-start; max-width: 1840px; margin: 0 auto; }
+  .wrap { flex: 1 1 auto; min-width: 0; max-width: 1560px; margin: 0 auto; padding: 16px 24px 40px; }
+
+  /* ---------- left sidebar: asset class filter ---------- */
+  .side {
+    position: sticky; top: 0; flex: 0 0 188px; width: 188px; align-self: flex-start;
+    padding: 18px 0 24px 24px; max-height: 100vh; overflow-y: auto;
+  }
+  .side h3 { margin: 0 0 8px; color: var(--muted); font-size: 11px; font-weight: 500;
+             text-transform: uppercase; letter-spacing: 0.06em; }
+  .sidelist { display: flex; flex-direction: column; gap: 4px; }
+  .sidebtn {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: var(--surface); color: var(--text-secondary);
+    border: 1px solid var(--border); border-left: 3px solid transparent; border-radius: 8px;
+    padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer; text-align: left;
+  }
+  .sidebtn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent); }
+  .sidebtn[aria-pressed="true"] {
+    color: var(--text-primary); font-weight: 600; border-left-color: var(--accent);
+    background: var(--page);
+  }
+  .sidebtn .cnt { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .sidebtn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .instrsel {
+    width: 100%; background: var(--surface); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 8px;
+    font: inherit; font-size: 13px;
+  }
+  .instrsel:disabled { opacity: 0.45; cursor: not-allowed; }
+  .pflegend { display: inline-flex; gap: 6px; margin-left: 16px; }
+  .pflbtn {
+    display: inline-flex; align-items: center; gap: 7px; background: var(--surface);
+    color: var(--text-secondary); border: 1px solid var(--border); border-radius: 6px;
+    padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .pflbtn:hover { color: var(--text-primary); border-color: var(--accent); }
+  .pflbtn i { display: inline-block; width: 22px; border-top: 2px dotted currentColor; }
+  .pflbtn[aria-pressed="false"] { opacity: 0.45; text-decoration: line-through; }
+  .pfrow { cursor: pointer; }
+  .pfrow.sel > * { background: var(--page); }
+  .pfrow:hover > * { background: var(--page); }
+  .ovtile { cursor: pointer; }
+  .ovtile.sel { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .sidenote { color: var(--muted); font-size: 11.5px; line-height: 1.5; margin: 12px 0 0; }
+  @media (max-width: 980px) {
+    .shell { display: block; }
+    .side { position: static; width: auto; max-height: none; padding: 16px 24px 0; }
+    .sidelist { flex-direction: row; flex-wrap: wrap; }
+  }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin-bottom: 12px; }
+  header .titles { flex: 1 1 460px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 20px; }
+  h1 { font-size: 24px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 0; }
+  .meta { color: var(--muted); font-size: 12px; margin: 0; }
+  .theme-toggle {
+    background: var(--surface); color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 14px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .theme-toggle:hover { color: var(--text-primary); }
+
+  .headbtns { display: flex; gap: 8px; align-items: flex-start; }
+
+  /* ---------- AUM slider ---------- */
+  .aumbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-bottom: 12px;
+  }
+  .aumlabel { display: flex; align-items: baseline; gap: 8px; }
+  .aumlabel > span:first-child {
+    color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .aumlabel b { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .aumlabel .mult { color: var(--text-secondary); font-size: 12px; }
+  .auminput { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .auminput > span { color: var(--text-secondary); }
+  .auminput input[type=number] {
+    width: 110px; padding: 5px 8px; font-family: inherit; font-size: 14px;
+    font-variant-numeric: tabular-nums; text-align: right;
+    color: var(--text-primary); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 4px;
+  }
+  .auminput input[type=number]:focus {
+    outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent);
+  }
+  .auminput button {
+    margin-left: 6px; padding: 5px 10px; font-family: inherit; font-size: 12px;
+    color: var(--text-secondary); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+  }
+  .auminput button:hover { color: var(--text-primary); border-color: var(--accent); }
+
+  /* ---------- date range ---------- */
+  .rbtn {
+    background: var(--page); color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 5px 11px; font: inherit; font-size: 12.5px; cursor: pointer;
+  }
+  .rbtn:hover { color: var(--text-primary); border-color: var(--accent); }
+  .rbtn.on { color: var(--text-primary); border-color: var(--accent); font-weight: 550; }
+  .rsep { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
+  .rdash { color: var(--muted); }
+  /* Per-card date range control: no global range bar, each chart has its own */
+  .cardrange {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 8px 10px; margin: 4px 0 12px;
+    background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .cardrange .crlabel {
+    color: var(--muted); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.05em; margin-right: 4px;
+  }
+  .cardrange .rbtn { background: var(--surface); }
+  .cardrange input[type=date] {
+    background: var(--surface); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 8px; font: inherit; font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cardrange input[type=date]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .cardrange .crnote { color: var(--muted); font-size: 11.5px; margin-left: auto; }
+
+  /* ---------- tabs ---------- */
+  nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  nav.tabs button {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--text-secondary); font: inherit; font-size: 13.5px;
+    padding: 10px 14px; cursor: pointer; margin-bottom: -1px;
+  }
+  nav.tabs button:hover { color: var(--text-primary); }
+  nav.tabs button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--accent); font-weight: 550; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .intro { color: var(--text-secondary); font-size: 13.5px; margin: 0 0 20px; max-width: 92ch; }
+
+  /* ---------- cards ---------- */
+  /* `repeat(auto-fit, minmax(420px, 1fr))` is avoided: `auto-fit` collapses empty
+     tracks after placement, so the `-1` in `.card.wide { grid-column: 1/-1 }` is
+     resolved differently per card and only the first wide card spans the full width.
+     The column count is explicit so `-1` is well defined (two columns).
+     `minmax(0, 1fr)` instead of `1fr`: `1fr` uses min-content as a floor, so a card
+     with a wide nowrap table pushes the track and overflows the grid. */
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 920px) { .cards { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px 16px; }
+  .card:has(.ovasof) { position: relative; }
+  .ovasof { position: absolute; top: 18px; right: 20px; margin: 0; }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .card .cardsub { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 12px; }
+  .card .note {
+    display: inline-block; background: var(--warn-bg); color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 11.5px; padding: 3px 8px; margin: 0 0 12px;
+  }
+  .card h3.subhead {
+    font-size: 12.5px; font-weight: 600; color: var(--text-secondary);
+    margin: 18px 0 6px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  /* min-height: if the height is 0 before render or on failure, later content overlaps.
+     position: relative: Plotly's inner svg is absolute, so this sets the reference box. */
+  .chart { width: 100%; min-height: 240px; position: relative; }
+  .chart .plot-container, .chart .svg-container { max-width: 100%; }
+  /* Plotly sets pointer-events:none on the axis layer, which blocks tick label clicks.
+     Some cards hide an asset when its y-axis label is clicked, so re-enable it in CSS too
+     (inline JS styles alone can miss the react() re-render timing). */
+  .chart .yaxislayer-above, .chart .yaxislayer-above g.ytick,
+  .chart .yaxislayer-above g.ytick text { pointer-events: all; }
+
+  /* ---------- unit toggle ---------- */
+  .unitbar { display: inline-flex; gap: 0; margin: 0 0 12px; border-radius: 7px; overflow: hidden;
+             border: 1px solid var(--border); }
+  .ubtn {
+    background: var(--page); color: var(--text-secondary);
+    border: none; border-right: 1px solid var(--border);
+    padding: 5px 14px; font: inherit; font-size: 12.5px; cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .ubtn:last-child { border-right: none; }
+  .ubtn:hover { color: var(--text-primary); }
+  .ubtn.on { background: var(--accent); color: #fff; font-weight: 550; }
+
+  /* ---------- context menu ---------- */
+  .ctxmenu {
+    position: fixed; z-index: 99999; min-width: 172px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px; box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  }
+  .ctxmenu button {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    color: var(--text-secondary); font: inherit; font-size: 12.5px;
+    padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .ctxmenu button:hover { background: var(--page); color: var(--text-primary); }
+
+  /* ---------- headlines ---------- */
+  ul.hlist { margin: 0 0 14px; padding-left: 18px; }
+  ul.hlist li { margin: 0 0 7px; line-height: 1.6; font-size: 13.5px; }
+  ul.hlist li:last-child { margin-bottom: 0; }
+
+  /* ---------- scenario card ---------- */
+  .scenbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px;
+  }
+  .scenbar label {
+    color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .scenbar select {
+    background: var(--page); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 5px 10px; font: inherit; font-size: 12.5px; cursor: pointer; min-width: 190px;
+  }
+  /* Hidden asset chip row: assets hidden by clicking a y-axis label collect here */
+  .hidebar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 10px; margin: 0 0 10px;
+    background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .hidebar .hlabel {
+    color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .hidebar .hchips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .hchip {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer;
+    color: var(--text-secondary);
+  }
+  .hchip:hover { color: var(--text-primary); border-color: var(--accent); }
+  .hchip::after { content: " +"; color: var(--muted); }
+  .hidebar .hall { margin-left: auto; }
+  .ctsum {
+    color: var(--text-secondary); font-size: 12.5px; margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  /* ---------- position overview: KPI + regime chip tiles ---------- */
+  .kpigrid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px; margin: 0 0 10px;
+  }
+  .kpi { background: var(--page); border: 1px solid var(--border); border-radius: 10px;
+         padding: 8px 12px; }
+  .kpi .kl { color: var(--muted); font-size: 11px; text-transform: uppercase;
+             letter-spacing: 0.05em; }
+  .kpi .kv { display: block; font-size: 20px; font-weight: 600; margin: 1px 0 0;
+             font-variant-numeric: tabular-nums; }
+  .kpi .ks { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .ovtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+             gap: 8px; }
+  .ovtile { background: var(--page); border: 1px solid var(--border);
+            border-left: 4px solid var(--baseline); border-radius: 10px; padding: 6px 9px; }
+  .ovtile .tc { font-weight: 600; font-size: 14px; }
+  .ovtile .tn { color: var(--muted); font-size: 11.5px; margin-left: 6px; }
+  .ovtile .tv { display: block; font-size: 18px; font-weight: 600; margin: 1px 0 0; white-space: nowrap;
+                font-variant-numeric: tabular-nums; }
+  .ovtile .td { color: var(--text-secondary); font-size: 11px; font-weight: 400; margin-left: 5px;
+                font-variant-numeric: tabular-nums; }
+  .regchip { display: inline-block; border: 1px solid; border-radius: 999px;
+             padding: 1px 6px; font-size: 10.5px; margin: 0 3px 0 0; white-space: nowrap; }
+  .ovtile .chips { display: flex; flex-wrap: nowrap; margin-top: 4px; }
+  .scmoves {
+    color: var(--text-secondary); font-size: 12px; margin: 0 0 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- sector / asset toggle panel ---------- */
+  /* Asset class buttons sit in one horizontal row, expanded assets go below */
+  .exppanel { display: block; margin: 0 0 10px; }
+  .secrow { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+  .exprow {
+    display: grid; grid-template-columns: 118px 1fr; gap: 8px;
+    align-items: start; margin: 0 0 6px;
+  }
+  .exprow > .seclab {
+    color: var(--muted); font-size: 11.5px; padding-top: 5px; text-align: right;
+  }
+  .secbtn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--page); border: 1px solid var(--border); border-radius: 7px;
+    padding: 4px 9px; font: inherit; font-size: 11.5px; cursor: pointer;
+    color: var(--muted); text-align: left;
+  }
+  .secbtn .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px;
+                 border: 1px solid var(--border); }
+  .secbtn .cnt { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .secbtn:hover { color: var(--text-primary); }
+  .secbtn.shown { color: var(--text-primary); border-color: var(--accent); font-weight: 550; }
+  .mktwrap { display: flex; flex-wrap: wrap; gap: 5px; padding-top: 2px; }
+  .mktbtn {
+    background: var(--page); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 10px 4px 8px; font: inherit; font-size: 12px; cursor: pointer;
+    color: var(--muted); display: inline-flex; align-items: center; gap: 5px;
+  }
+  /* The asset button swatch is a line segment, not a dot: it mirrors the chart
+     line style (solid/dashed/dotted) so the matching line is easy to find. */
+  .mktbtn .swatch { width: 18px; height: 0; flex: 0 0 18px;
+                    border-top-width: 2.5px; border-top-style: solid;
+                    border-top-color: transparent; }
+  .mktbtn:hover { color: var(--text-primary); }
+  .mktbtn.shown { color: var(--text-primary); border-color: var(--accent); font-weight: 550; }
+  .expactions { display: inline-flex; gap: 8px; align-items: center; margin-left: auto; }
+  .expactions label { color: var(--muted); font-size: 11px;
+                      text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* ---------- variant selector ---------- */
+  .variantbar { display: flex; align-items: center; gap: 8px; margin: 0 0 12px;
+               flex-wrap: wrap; }
+  .variantbar select[hidden] { display: none; }
+  .variantbar label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .variantbar select {
+    background: var(--page); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 5px 10px; font: inherit; font-size: 12.5px; cursor: pointer; min-width: 200px;
+  }
+
+  /* ---------- table view ---------- */
+  .tableview { margin-top: 12px; }
+  .tableview > summary {
+    cursor: pointer; color: var(--muted); font-size: 12px;
+    list-style: none; padding: 6px 0; user-select: none;
+  }
+  .tableview > summary::-webkit-details-marker { display: none; }
+  .tableview > summary::before { content: "▸ "; }
+  .tableview[open] > summary::before { content: "▾ "; }
+  .tableview > summary:hover { color: var(--text-primary); }
+  .tablewrap { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+  table.data-table { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  table.data-table th, table.data-table td { padding: 6px 12px 6px 0; text-align: left; white-space: nowrap; }
+  table.data-table thead th {
+    position: sticky; top: 0; background: var(--surface);
+    color: var(--muted); font-weight: 500; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--baseline);
+  }
+  table.data-table tbody tr { border-bottom: 1px solid var(--gridline); }
+  table.data-table tbody tr:last-child { border-bottom: none; }
+  table.data-table tbody th { color: var(--text-secondary); font-weight: 500; }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  .warnbox {
+    margin-top: 14px; padding: 10px 14px; background: var(--warn-bg);
+    border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px;
+  }
+  .warnbox ul { margin: 6px 0 0; padding-left: 20px; }
+
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="side" id="sideBar" aria-label="Asset class filter">
+  <h3>Asset class</h3>
+  <div class="sidelist" id="sectorList"></div>
+  <h3 style="margin-top:18px">Market</h3>
+  <select id="instrSel" class="instrsel" aria-label="Price chart market"></select>
+  <p class="sidenote" id="sideNote"></p>
+</aside>
+<div class="wrap">
+
+  <header>
+    <div class="titles">
+      <h1>{{ title }}</h1>
+      <p class="meta">Positions as of <b>{{ as_of }}</b> &nbsp;·&nbsp; Benchmark {{ benchmark }} &nbsp;·&nbsp; Generated {{ generated }}</p>
+    </div>
+    <div class="headbtns">
+      <button class="theme-toggle" id="themeToggle" type="button">◐ Theme</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    {% for tab in tabs %}
+    <button role="tab" data-tab="{{ tab.id }}" aria-selected="{{ 'true' if loop.first else 'false' }}">{{ tab.label }}</button>
+    {% endfor %}
+  </nav>
+
+  {% for tab in tabs %}
+  <section class="panel {{ 'active' if loop.first else '' }}" id="panel-{{ tab.id }}" role="tabpanel"{{ ' data-filter="1"' if tab.id in filter_tabs else '' }}{{ ' data-instr="1"' if tab.id == 'main' else '' }}>
+    {% if tab.intro %}<p class="intro">{{ tab.intro | safe }}</p>{% endif %}
+    <div class="cards">
+      {% for card in tab.cards %}
+      {% set cardkey = card.id ~ '-' ~ loop.index0 %}
+      <div class="card {{ 'wide' if card.wide else '' }}" id="card-{{ cardkey }}">
+        <h2>{{ card.title }}</h2>
+        {% if card.subtitle %}<p class="cardsub">{{ card.subtitle | safe }}</p>{% endif %}
+        {% if card.note %}<span class="note">{{ card.note }}</span>{% endif %}
+
+        {% if card.variants or card.variant_tables %}
+        <div class="variantbar">
+          <label for="sel-{{ cardkey }}">{{ card.variant_label }}</label>
+          <select id="sel-{{ cardkey }}" data-card="{{ cardkey }}" data-sel="1"
+                  {{ 'hidden' if card.variant_buttons }}>
+            {% for opt in card.sel1_opts %}
+            <option value="{{ opt }}"{{ ' selected' if opt == card.variant_default }}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+          {% if card.variant_buttons %}
+          <span class="unitbar" data-selbtns="sel-{{ cardkey }}">
+            {% for opt in card.sel1_opts %}
+            <button type="button" class="ubtn{{ ' on' if opt == (card.variant_default or card.sel1_opts[0]) }}"
+                    data-opt="{{ opt }}">{{ opt }}</button>
+            {% endfor %}
+          </span>
+          {% endif %}
+          {% if card.variant2_opts %}
+          <label for="sel2-{{ cardkey }}">{{ card.variant2_label }}</label>
+          {# With only two or three options, buttons are faster than a dropdown. The value
+             is held by the hidden select, so the applyVariant logic is unchanged. #}
+          <select id="sel2-{{ cardkey }}" data-card="{{ cardkey }}" data-sel="2"
+                  {{ 'hidden' if card.variant2_buttons }}>
+            {% for opt in card.variant2_opts %}
+            <option value="{{ opt }}"{{ ' selected' if opt == card.variant2_default }}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+          {% if card.variant2_buttons %}
+          <span class="unitbar" data-selbtns="sel2-{{ cardkey }}">
+            {% for opt in card.variant2_opts %}
+            <button type="button" class="ubtn{{ ' on' if opt == (card.variant2_default or card.variant2_opts[0]) }}"
+                    data-opt="{{ opt }}">{{ opt }}</button>
+            {% endfor %}
+          </span>
+          {% endif %}
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if card.unit_toggle %}
+        {# Unit toggle: switch between $BN and pp per card #}
+        <div class="unitbar" data-card="{{ cardkey }}">
+          {% for label, cid in card.unit_toggle.items() %}
+          <button type="button" class="ubtn{{ ' on' if cid == card.id else '' }}"
+                  data-chart="{{ cid }}">{{ label }}</button>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if card.range_control %}
+        {# Date range control specific to this card. scope = id suffix of the chart div. #}
+        <div class="cardrange" data-scope="{{ 'expo' if card.id == 'exposure_expand' else cardkey }}">
+          <span class="crlabel">Period</span>
+          {% for p in ['6M','YTD','1Y','3Y','5Y','10Y'] %}
+          <button type="button" class="rbtn" data-span="{{ p }}">{{ p }}</button>
+          {% endfor %}
+          <button type="button" class="rbtn on" data-span="ALL">All</button>
+          <span class="rsep"></span>
+          <input type="date" class="crfrom" min="{{ date_min }}" max="{{ date_max }}"
+                 aria-label="Start date">
+          <span class="rdash">~</span>
+          <input type="date" class="crto" min="{{ date_min }}" max="{{ date_max }}"
+                 aria-label="End date">
+          <button type="button" class="rbtn crapply">Apply</button>
+          <span class="crnote">Data {{ date_min }} ~ {{ date_max }}</span>
+        </div>
+        {% endif %}
+
+        {% if card.id == 'expo_change' and exposure_grid_json != 'null' %}
+        <div class="scenbar">
+          <label>Period</label>
+          <span class="unitbar" id="ecPeriods"></span>
+          <label>View</label>
+          <span class="unitbar" id="ecLevel">
+            <button type="button" class="ubtn on" data-opt="sector">Asset class</button>
+            <button type="button" class="ubtn" data-opt="asset">Asset</button>
+          </span>
+        </div>
+        <div class="chart" id="chart-expochg"></div>
+        <details class="tableview">
+          <summary>Table</summary>
+          <div class="tablewrap" id="table-expochg"></div>
+        </details>
+        {% elif card.id == 'realized_flow' and flow_grid_json != 'null' %}
+        <div class="scenbar">
+          <label for="rfWin">Cumulative window</label>
+          <select id="rfWin"></select>
+          <span class="unitbar" id="rfUnit">
+            <button type="button" class="ubtn on" data-opt="usd">$BN</button>
+            <button type="button" class="ubtn" data-opt="pct">pp</button>
+            <button type="button" class="ubtn" data-opt="pctile">Percentile</button>
+          </span>
+          <span class="unitbar" id="rfView">
+            <button type="button" class="ubtn on" data-opt="total">Total</button>
+            <button type="button" class="ubtn" data-opt="split">Decomposition</button>
+          </span>
+          <span class="unitbar" id="rfMethod" hidden>
+            <button type="button" class="ubtn on" data-opt="rolling">Rolling</button>
+            <button type="button" class="ubtn" data-opt="exp">Expanding</button>
+          </span>
+          <span id="rfPctWrap" hidden>
+            <label for="rfPctWin">Percentile window</label>
+            <select id="rfPctWin"></select>
+          </span>
+          <span class="ctsum" id="rfSum"></span>
+        </div>
+        <div class="chart" id="chart-rflow"></div>
+        <details class="tableview">
+          <summary>Table</summary>
+          <div class="tablewrap" id="table-rflow"></div>
+        </details>
+        {% elif card.id == 'agewatch' and age_grid_json != 'null' %}
+        <div class="scenbar">
+          <label>Shock horizon</label>
+          <span class="unitbar" id="agHz"></span>
+          <label>Y axis</label>
+          <span class="unitbar" id="agY">
+            <button type="button" class="ubtn on" data-opt="sigma">σ (comparable)</button>
+            <button type="button" class="ubtn" data-opt="pct">% (execution basis)</button>
+          </span>
+          <span class="ctsum" id="agSum"></span>
+        </div>
+        <div class="chart" id="chart-agewatch"></div>
+        {% elif card.id == 'cumflow' and scenario_grid_json != 'null' %}
+        <div class="scenbar">
+          <label for="cfAsset">Asset</label>
+          <select id="cfAsset"></select>
+          <label for="cfDriver">Driver</label>
+          <select id="cfDriver"></select>
+          <label>Display</label>
+          <span class="unitbar" id="cfView">
+            <button type="button" class="ubtn on" data-opt="usd">Value $BN</button>
+            <button type="button" class="ubtn" data-opt="pct">Value pp</button>
+            <button type="button" class="ubtn" data-opt="pctile">Percentile</button>
+          </span>
+          <span class="unitbar" id="cfMethod" hidden>
+            <button type="button" class="ubtn on" data-opt="rolling">Rolling</button>
+            <button type="button" class="ubtn" data-opt="expanding">Expanding</button>
+          </span>
+          <span id="cfWinWrap" hidden>
+            <label for="cfWin">Percentile window</label>
+            <select id="cfWin"></select>
+          </span>
+        </div>
+        <div class="cardrange" data-scope="cumflow">
+          <span class="crlabel">Display period</span>
+          {% for pp in ['6M','YTD','1Y','3Y','5Y','10Y'] %}
+          <button type="button" class="rbtn" data-span="{{ pp }}">{{ pp }}</button>
+          {% endfor %}
+          <button type="button" class="rbtn on" data-span="ALL">All</button>
+          <span class="rsep"></span>
+          <input type="date" class="crfrom" min="{{ date_min }}" max="{{ date_max }}"
+                 aria-label="Start date">
+          <span class="rdash">~</span>
+          <input type="date" class="crto" min="{{ date_min }}" max="{{ date_max }}"
+                 aria-label="End date">
+          <button type="button" class="rbtn crapply">Apply</button>
+          <span class="crnote">Data {{ date_min }} ~ {{ date_max }}</span>
+        </div>
+        <div class="chart" id="chart-cumflow"></div>
+        <div class="tablewrap" id="table-cumflow" style="margin-top:12px"></div>
+        {% elif card.id == 'price_flip' and price_grid_json != 'null' %}
+        {# Price + flip price: JS picks one market from PF and draws it #}
+        <div class="scenbar">
+          <span class="unitbar" id="pfRange">
+            <button type="button" class="ubtn" data-opt="6">6M</button>
+            <button type="button" class="ubtn" data-opt="12">1Y</button>
+            <button type="button" class="ubtn on" data-opt="24">2Y</button>
+          </span>
+          <span class="pflegend" id="pfLegend"></span>
+        </div>
+        <div class="chart" id="chart-priceflip"></div>
+        <div class="tablewrap" id="pfTable" style="margin-top:12px"></div>
+        {% elif card.id == 'position_overview' and overview_grid_json != 'null' %}
+        {# Position overview: 4 KPI cells + per-market tiles (regime chips). The asset class filter works only inside this card #}
+        <span class="ctsum ovasof" id="ovNote"></span>
+        <div class="kpigrid" id="ovKpi"></div>
+        <div class="ovtiles" id="ovTiles"></div>
+        {% elif card.id == 'current_positioning' and scenario_grid_json != 'null' %}
+        {# Notional / risk contribution toggle: the model has w = m̃/σ, so showing notional
+           alone overstates low-volatility markets. Both measures get equal weight. #}
+        {% if risk_grid_json != 'null' %}
+        <div class="scenbar">
+          <span class="unitbar" id="cpUnit">
+            <button type="button" class="ubtn on" data-opt="pct">Notional %</button>
+            <button type="button" class="ubtn" data-opt="risk">Risk contribution %</button>
+          </span>
+          <span class="ctsum" id="cpSum"></span>
+        </div>
+        {% endif %}
+        {# Click a y-axis asset name to hide it. Hidden names collect in the chip row above; click again to restore #}
+        <div class="hidebar" id="cpHidden" hidden>
+          <span class="hlabel">Hidden</span><span class="hchips"></span>
+          <button type="button" class="rbtn hall">Restore all</button>
+        </div>
+        <div class="chart" id="chart-current"></div>
+        {% elif card.id == 'certain_trades' and scenario_grid_json != 'null' %}
+        {# Certain trades: JS extracts min/max/flat from SG and draws it #}
+        <div class="scenbar">
+          <label for="ctDriver">Driver</label>
+          <select id="ctDriver"></select>
+          <span class="unitbar" id="ctUnit">
+            <button type="button" class="ubtn on" data-opt="usd">$BN</button>
+            <button type="button" class="ubtn" data-opt="pct">pp</button>
+          </span>
+          <span class="ctsum" id="ctSum"></span>
+        </div>
+        <div class="hidebar" id="ctHidden" hidden>
+          <span class="hlabel">Hidden</span><span class="hchips"></span>
+          <button type="button" class="rbtn hall">Restore all</button>
+        </div>
+        <div class="chart" id="chart-certain"></div>
+        <details class="tableview">
+          <summary>Table</summary>
+          <div class="tablewrap" id="table-certain"></div>
+        </details>
+        {% elif card.id == 'trade_pressure' and pressure_grid_json != 'null' %}
+        {# Trade pressure: JS extracts expected trades and buy probability from PG and draws it #}
+        <div class="scenbar">
+          <span class="unitbar" id="ptUnit">
+            <button type="button" class="ubtn on" data-opt="usd">$BN</button>
+            <button type="button" class="ubtn" data-opt="pct">pp</button>
+          </span>
+          <span class="ctsum" id="ptSum"></span>
+        </div>
+        <div class="hidebar" id="ptHidden" hidden>
+          <span class="hlabel">Hidden</span><span class="hchips"></span>
+          <button type="button" class="rbtn hall">Restore all</button>
+        </div>
+        <div class="chart" id="chart-pressure"></div>
+        <details class="tableview">
+          <summary>Table</summary>
+          <div class="tablewrap" id="table-pressure"></div>
+        </details>
+        {% elif card.id == 'scenario_combined' and scenario_grid_json != 'null' %}
+        {# Combined scenario card: four controls (driver / metric / unit / level) #}
+        <div class="scenbar">
+          <label for="scDriver">Driver</label>
+          <select id="scDriver"></select>
+          <span class="unitbar" id="scMetric">
+            <button type="button" class="ubtn on" data-opt="trades">Required trades</button>
+            <button type="button" class="ubtn" data-opt="positions">Projected positions</button>
+          </span>
+          <span class="unitbar" id="scUnit">
+            <button type="button" class="ubtn on" data-opt="usd">$BN</button>
+            <button type="button" class="ubtn" data-opt="pct">pp</button>
+          </span>
+          <span class="unitbar" id="scLevel">
+            <button type="button" class="ubtn on" data-opt="asset">Asset bars</button>
+            <button type="button" class="ubtn" data-opt="heat">Asset heatmap</button>
+          </span>
+        </div>
+        <p class="scmoves" id="scMoves"></p>
+        <div class="chart" id="chart-scen"></div>
+        <details class="tableview">
+          <summary>Table</summary>
+          <div class="tablewrap" id="table-scen"></div>
+        </details>
+        {% elif card.id == 'exposure_expand' and exposure_grid_json != 'null' %}
+        {# Asset class buttons; clicking one expands its detailed asset buttons #}
+        <div class="scenbar">
+          <label>View</label>
+          <span class="unitbar" id="expView">
+            <button type="button" class="ubtn on" data-opt="line">Line</button>
+            <button type="button" class="ubtn" data-opt="heat">Heatmap</button>
+          </span>
+          <span class="expactions" id="expActions">
+            <label>Detail</label>
+            <span class="unitbar" id="expDetail">
+              <button type="button" class="ubtn on" data-opt="off">Off</button>
+              <button type="button" class="ubtn" data-opt="on">On</button>
+            </span>
+            <button type="button" class="rbtn" id="expReset">Reset legend</button>
+          </span>
+        </div>
+        <div class="exppanel" id="expPanel"></div>
+        <div class="chart" id="chart-expo"></div>
+        <details class="tableview">
+          <summary>Table</summary>
+          <div class="tablewrap" id="table-expo"></div>
+        </details>
+        {% elif card.chart %}
+        <div class="chart" id="chart-{{ cardkey }}" data-chart="{{ card.id }}"></div>
+        {% endif %}
+
+        {% if card.table_html %}
+        <details class="tableview"{{ ' open' if (card.table_open if card.table_open is not none else not card.chart) else '' }}>
+          <summary>{{ 'Table' if card.chart else 'Show table' }}</summary>
+          <div class="tablewrap" id="table-{{ cardkey }}">{{ card.table_html | safe }}</div>
+        </details>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <footer>
+  <div class="aumbar">
+    <div class="aumlabel">
+      <span>CTA AUM assumption</span>
+      <b id="aumValue">${{ aum_base|round|int }}BN</b>
+      <span id="aumMult" class="mult"></span>
+    </div>
+    <div class="auminput">
+      <span>$</span>
+      <input type="number" id="aumInput" min="1" max="100000" step="10"
+             value="{{ aum_base|round|int }}"
+             aria-label="CTA AUM assumption ($BN)">
+      <span>BN</span>
+      <button type="button" id="aumReset">Default (${{ aum_base|round|int }}BN)</button>
+    </div>
+  </div>
+    The replica model gives estimates. These are the positions of a model that replicates a
+    public benchmark, not actual CTA positions. Dollar amounts are proportional to the AUM assumption.
+  </footer>
+
+</div>
+</div>
+
+<script>
+const CHARTS   = {{ charts_json | safe }};
+const VARIANTS = {{ variants_json | safe }};   // {cardkey: {chartIds:{opt:id}, tables:{opt:html}}}
+const USD      = {{ usd_charts_json | safe }}; // {chartId: {axis:'y'|'x'|'z', decimals:n}}
+const AUM_BASE = {{ aum_base }};               // $BN: base AUM baked into the charts
+let   aumNow   = AUM_BASE;
+
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') || 'light';
+}
+
+// ---- sidebar asset class filter (global state) ----
+// SECTOR = 'ALL' or an asset class name. Market-level cards are filtered with inSector(code).
+// Baked charts hold numeric arrays as base64 binary and cannot be filtered in the browser,
+// so per-asset-class variants are baked in advance and only the chart id is swapped (SECTOR_CHARTS).
+const SECTOR_META = {{ sector_meta_json | safe }};    // {sectors, of:{code:sector}, counts, total}
+const SECTOR_CHARTS = {{ sector_charts_json | safe }}; // {base id: {asset class: variant id}}
+let SECTOR = 'ALL';
+function inSector(code) {
+  return SECTOR === 'ALL' || SECTOR_META.of[code] === SECTOR;
+}
+function sectorChartId(id) {
+  const m = SECTOR_CHARTS[id];
+  return (SECTOR !== 'ALL' && m && m[SECTOR] && CHARTS[m[SECTOR]]) ? m[SECTOR] : id;
+}
+
+// Signed thousands format (matches Python '+,.1f')
+function fmtSigned(v, dec) {
+  const s = v < 0 ? '-' : '+';
+  return s + Math.abs(v).toLocaleString('en-US',
+    {minimumFractionDigits: dec, maximumFractionDigits: dec});
+}
+
+// Rescale $ charts by the current AUM ratio. $ amounts are proportional to AUM, so multiplication is enough.
+function scaleUsdSpec(spec, meta, factor) {
+  if (factor === 1) return spec;
+  const out = JSON.parse(JSON.stringify(spec));
+  const ax = meta.axis, dec = meta.decimals;
+  (out.data || []).forEach(tr => {
+    const arr = tr[ax];
+    if (!Array.isArray(arr)) return;
+    if (Array.isArray(arr[0])) {                       // heatmap z (2D)
+      tr[ax] = arr.map(row => row.map(v => (v == null ? v : v * factor)));
+      if (Array.isArray(tr.text) && Array.isArray(tr.text[0])) {
+        tr.text = tr[ax].map(row => row.map(v => (v == null ? '' : fmtSigned(v, dec))));
+      }
+      if (out.data.length && tr.zmin != null) { tr.zmin *= factor; tr.zmax *= factor; }
+    } else {
+      tr[ax] = arr.map(v => (v == null ? v : v * factor));
+      if (Array.isArray(tr.text)) {
+        tr.text = tr[ax].map(v => (v == null ? '' : fmtSigned(v, dec)));
+      }
+    }
+    // Scale customdata too if it is in $BN (recent_flow etc.)
+    if (Array.isArray(tr.customdata) && !Array.isArray(tr.customdata[0])) {
+      tr.customdata = tr.customdata.map(v => (typeof v === 'number' ? v * factor : v));
+    }
+  });
+  // Endpoint direct labels (annotations) cannot be regenerated, so the ratio notation replaces them
+  (out.layout.annotations || []).forEach(a => { if (a.text) a.text = a.text; });
+  return out;
+}
+
+// Drawing into an invisible (zero width) element makes Plotly freeze its inner svg at
+// width 0, so the chart overflows the container and overlaps when the tab opens later.
+// So never draw while hidden: only mark it 'pending' and draw once it is actually
+// visible. This rule has no exception, even with force.
+function isVisible(el) {
+  return el && el.offsetParent !== null && el.clientWidth > 0;
+}
+
+const TIME_CHARTS = new Set({{ time_charts_json | safe }});
+// The period is set per card. key = part of the chart div id after 'chart-' (scope).
+// With one global range, narrowing exposure to 6 months also narrowed the heatmap.
+const RANGES = {};             // {scope: [from, to]}: full range if absent
+function rangeFor(el) {
+  if (!el || !el.id || el.id.indexOf('chart-') !== 0) return null;
+  return RANGES[el.id.slice(6)] || null;
+}
+
+function renderInto(el, baseId, force) {
+  if (!el || !baseId || !CHARTS[baseId]) return;
+  if (!isVisible(el)) { el.dataset.pending = baseId; return; }
+  // base id -> (if an asset class is selected) its variant id. dataset.chart keeps the base id.
+  const chartId = sectorChartId(baseId);
+  if (!force && el.dataset.rendered === chartId + '|' + currentTheme()
+      && !USD[chartId]) return;                       // skip if already in the same state
+  delete el.dataset.pending;
+  let spec = CHARTS[chartId][currentTheme()] || CHARTS[chartId]['light'];
+  if (USD[chartId]) spec = scaleUsdSpec(spec, USD[chartId], aumNow / AUM_BASE);
+  // The period is baked into the layout at render time. Plotly.react overwrites the
+  // layout, so a later relayout would be lost on every theme change or tab switch.
+  const dr = rangeFor(el);
+  if (dr && TIME_CHARTS.has(chartId)) {
+    spec = {data: spec.data,
+            layout: Object.assign({}, spec.layout,
+              {xaxis: Object.assign({}, spec.layout.xaxis || {},
+                                    {range: dr, autorange: false})})};
+  }
+  // `responsive: true` treats the container size as the truth. So when
+  //    Plotly.Plots.resize() re-measures the div, layout.height is ignored and the chart
+  //    shrinks to the CSS min-height (240px), which shrank heatmaps when the period changed.
+  //    -> the figure height is written into the div inline style so the container is authoritative.
+  if (spec.layout && spec.layout.height) el.style.height = spec.layout.height + 'px';
+  Plotly.react(el, spec.data, spec.layout,
+               {responsive: true, displayModeBar: false, locale: 'en'})
+        .then(() => { try { Plotly.Plots.resize(el); } catch (e) {} });
+  el.dataset.chart = baseId;
+  el.dataset.rendered = chartId + '|' + currentTheme();
+}
+
+// Settle charts in the container that are not drawn yet or have the wrong size.
+function settleCharts(root) {
+  (root || document).querySelectorAll('.chart').forEach(el => {
+    if (!isVisible(el)) return;
+    const want = el.dataset.pending || el.dataset.chart;
+    if (el.dataset.pending) { renderInto(el, want, true); return; }
+    if (el._fullLayout) { try { Plotly.Plots.resize(el); } catch (e) {} }
+    else renderInto(el, want, true);
+  });
+}
+
+// ---- direct AUM input ----
+function applyAum(v) {
+  aumNow = v;
+  const f = v / AUM_BASE;
+  document.getElementById('aumValue').textContent = '$' + v.toLocaleString('en-US') + 'BN';
+  const mult = document.getElementById('aumMult');
+  mult.textContent = (f === 1) ? '(base)' : '(' + f.toFixed(2) + 'x base)';
+  // Recompute KPIs
+  document.querySelectorAll('[data-usd-bn]').forEach(el => {
+    const base = parseFloat(el.dataset.usdBn);
+    if (!isFinite(base)) return;
+    const dec = (el.dataset.usdFmt || '+,.0f').includes('.1') ? 1 : 0;
+    // Put the sign before the $ (-$25.2B) to match the initial render, not '$-25.2B'.
+    const v = base * f;
+    const txt = (v < 0 ? '-' : '+') + '$'
+      + Math.abs(v).toLocaleString('en-US',
+          {minimumFractionDigits: dec, maximumFractionDigits: dec});
+    el.textContent = (el.dataset.usdPrefix || '') + txt + (el.dataset.usdSuffix || '');
+  });
+  rerenderAll();
+}
+
+const aumInput = document.getElementById('aumInput');
+// Ignore blank or non-positive input and keep the last valid value.
+// Redrawing every chart on each keystroke is sluggish, so debounce slightly.
+let aumTimer = null;
+function readAum() {
+  const v = parseFloat(aumInput.value);
+  if (!isFinite(v) || v <= 0) return;
+  applyAum(v);
+}
+aumInput.addEventListener('input', () => {
+  clearTimeout(aumTimer);
+  aumTimer = setTimeout(readAum, 250);
+});
+aumInput.addEventListener('change', () => { clearTimeout(aumTimer); readAum(); });
+aumInput.addEventListener('blur', () => {
+  const v = parseFloat(aumInput.value);
+  if (!isFinite(v) || v <= 0) aumInput.value = aumNow;   // revert invalid input
+});
+document.getElementById('aumReset').addEventListener('click', () => {
+  aumInput.value = AUM_BASE;
+  applyAum(AUM_BASE);
+});
+
+function renderVisible(force) {
+  document.querySelectorAll('.panel.active .chart').forEach(el => {
+    renderInto(el, el.dataset.pending || el.dataset.chart, force);
+  });
+}
+
+function rerenderAll() {
+  // Hidden tabs are only marked 'pending' and drawn when opened.
+  document.querySelectorAll('.chart').forEach(el => {
+    const id = el.dataset.pending || el.dataset.chart;
+    if (isVisible(el)) renderInto(el, id, true);
+    else el.dataset.pending = id;
+  });
+  // Charts drawn directly by JS are not in CHARTS, so call them separately.
+  // Scenario cards multiply $BN by aumNow, so they must be redrawn whenever AUM changes.
+  if (window.__scenRedraw) window.__scenRedraw();
+  if (window.__certainRedraw) window.__certainRedraw();
+  if (window.__pressureRedraw) window.__pressureRedraw();
+  if (window.__overviewRedraw) window.__overviewRedraw();
+  if (window.__priceflipRedraw) window.__priceflipRedraw();
+  if (window.__curPosRedraw) window.__curPosRedraw();
+  if (window.__cumFlowRedraw) window.__cumFlowRedraw();
+  if (window.__rflowRedraw) window.__rflowRedraw();
+  if (window.__ageRedraw) window.__ageRedraw();
+}
+
+// ---- variant selectors (driver / reference window etc.) ----
+// With two selectors, the combined key "option1||option2" is used for lookup.
+function applyVariant(key) {
+  const spec = VARIANTS[key];
+  if (!spec) return;
+  const s1 = document.getElementById('sel-' + key);
+  const s2 = document.getElementById('sel2-' + key);
+  const opt = s2 ? (s1.value + '||' + s2.value) : s1.value;
+  if (spec.chartIds && spec.chartIds[opt]) {
+    // If hidden, renderInto only marks it pending and moves on (prevents overlap)
+    renderInto(document.getElementById('chart-' + key), spec.chartIds[opt], true);
+  }
+  if (spec.tables && spec.tables[opt] !== undefined) {
+    const tbl = document.getElementById('table-' + key);
+    if (tbl) { tbl.innerHTML = spec.tables[opt]; applyTableFilter(tbl); }
+  }
+}
+document.querySelectorAll('.variantbar select').forEach(sel => {
+  sel.addEventListener('change', () => applyVariant(sel.dataset.card));
+});
+
+// ---- unit toggle ($BN <-> pp) ----
+// $ amounts are proportional to the AUM assumption, so each card can also show pp, which is independent of AUM.
+document.querySelectorAll('.unitbar[data-card]').forEach(bar => {
+  const key = bar.dataset.card;
+  bar.querySelectorAll('.ubtn').forEach(b => b.addEventListener('click', () => {
+    bar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+    renderInto(document.getElementById('chart-' + key), b.dataset.chart, true);
+  }));
+});
+
+// When buttons stand in for a selector: put the value into the hidden select and fire change.
+// (Avoids duplicating the logic that resolves the combined key "option1||option2".)
+document.querySelectorAll('.unitbar[data-selbtns]').forEach(bar => {
+  const sel = document.getElementById(bar.dataset.selbtns);
+  if (!sel) return;
+  bar.querySelectorAll('.ubtn').forEach(b => b.addEventListener('click', () => {
+    bar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+    sel.value = b.dataset.opt;
+    sel.dispatchEvent(new Event('change'));
+  }));
+});
+
+// ---- asset class filter: table row filtering / sidebar ----
+// In baked tables (HTML) the row header (<th>) starts with the market code. Hide the row if the code is outside the selected asset class.
+// Rows that are not market codes (statistics tables etc.) are left alone.
+function applyTableFilter(root) {
+  const scope = root || document.querySelector('.panel.active') || document;
+  const rows = (root ? scope.querySelectorAll('table.data-table tbody tr')
+                     : scope.querySelectorAll('table.data-table tbody tr'));
+  rows.forEach(tr => {
+    if (!tr.closest('.panel[data-filter]')) return;
+    const th = tr.querySelector('th');
+    if (!th) return;
+    const code = th.textContent.trim().split(/\s+/)[0];
+    if (!(code in SECTOR_META.of)) { tr.hidden = false; return; }
+    tr.hidden = !inSector(code);
+  });
+}
+
+// JS cards to redraw per tab (same list as showTab)
+const TAB_REDRAW = {
+  scenario: ['__scenRedraw', '__certainRedraw', '__pressureRedraw',
+             '__ageRedraw'],
+  main: ['__priceflipRedraw', '__overviewRedraw'],
+  exposure: ['__curPosRedraw', '__expoRedraw', '__expoChgRedraw'],
+  flow: ['__cumFlowRedraw', '__rflowRedraw'],
+  cftc: [],
+};
+function activeTabId() {
+  const p = document.querySelector('.panel.active');
+  return p ? p.id.replace('panel-', '') : null;
+}
+
+function updateSidebar() {
+  const p = document.querySelector('.panel.active');
+  const on = !!(p && p.dataset.filter === '1');
+  document.querySelectorAll('.sidebtn').forEach(b => { b.disabled = !on; });
+  const isel = document.getElementById('instrSel');
+  if (isel) isel.disabled = !(p && p.dataset.instr === '1');
+  const note = document.getElementById('sideNote');
+  if (!note) return;
+  note.textContent = !on
+    ? 'This tab uses the combined portfolio across markets, so the asset class filter does not apply.'
+    : (SECTOR === 'ALL'
+        ? ''
+        : 'Showing ' + SECTOR + ' only.' +
+          (p.id === 'panel-exposure' ? ' Risk contribution shares are relative to the total portfolio.' : ''));
+}
+
+function setSector(s) {
+  SECTOR = s;
+  document.querySelectorAll('.sidebtn').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.sector === s)));
+  // Baked charts: swap to the asset class variant id and redraw (hidden tabs draw when opened)
+  document.querySelectorAll('.chart').forEach(el => {
+    const id = el.dataset.pending || el.dataset.chart;
+    if (!id || !SECTOR_CHARTS[id]) return;
+    if (isVisible(el)) renderInto(el, id, true); else el.dataset.pending = id;
+  });
+  applyTableFilter();
+  if (window.__instrSync) window.__instrSync();
+  // JS-drawn cards: redraw only those of the active tab now; the rest redraw when their tab opens
+  (TAB_REDRAW[activeTabId()] || []).forEach(fn => { if (window[fn]) window[fn](); });
+  updateSidebar();
+}
+
+(function initSidebar() {
+  const list = document.getElementById('sectorList');
+  if (!list) return;
+  const opts = [['ALL', 'All', SECTOR_META.total]].concat(
+    SECTOR_META.sectors.map(s => [s, s, SECTOR_META.counts[s]]));
+  list.innerHTML = opts.map(o =>
+    '<button type="button" class="sidebtn" data-sector="' + o[0] + '" aria-pressed="' +
+    (o[0] === SECTOR) + '"><span>' + o[1] + '</span><span class="cnt">' + o[2] + '</span></button>'
+  ).join('');
+  list.querySelectorAll('.sidebtn').forEach(b =>
+    b.addEventListener('click', () => setSector(b.dataset.sector)));
+  updateSidebar();
+})();
+
+// ---- tabs ----
+// Changing the class and drawing in the same frame leaves the browser layout
+// unsettled, so the width is 0 or stale and the charts overlap.
+// So draw on the next frame. Re-clicking the same tab does nothing.
+function showTab(id) {
+  const panel = document.getElementById('panel-' + id);
+  if (!panel) return;
+  if (panel.classList.contains('active')) { settleCharts(panel); return; }
+
+  document.querySelectorAll('nav.tabs button').forEach(b =>
+    b.setAttribute('aria-selected', String(b.dataset.tab === id)));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  panel.classList.add('active');
+  updateSidebar();
+  applyTableFilter();
+
+  requestAnimationFrame(() => {
+    settleCharts(panel);
+    if (id === 'scenario' && window.__scenRedraw) window.__scenRedraw();
+    if (id === 'scenario' && window.__certainRedraw) window.__certainRedraw();
+    if (id === 'scenario' && window.__pressureRedraw) window.__pressureRedraw();
+    if (id === 'main' && window.__priceflipRedraw) window.__priceflipRedraw();
+    if (id === 'main' && window.__overviewRedraw) window.__overviewRedraw();
+    if (id === 'exposure' && window.__curPosRedraw) window.__curPosRedraw();
+    if (id === 'flow' && window.__cumFlowRedraw) window.__cumFlowRedraw();
+    if (id === 'flow' && window.__rflowRedraw) window.__rflowRedraw();
+    if (id === 'scenario' && window.__ageRedraw) window.__ageRedraw();
+    if (id === 'exposure' && window.__expoRedraw) window.__expoRedraw();
+    if (id === 'exposure' && window.__expoChgRedraw) window.__expoChgRedraw();
+    requestAnimationFrame(() => settleCharts(panel));   // once more after fonts/scrollbars apply
+  });
+}
+
+document.querySelectorAll('nav.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => showTab(btn.dataset.tab));
+});
+
+// Opening a table (details) changes the width of the chart inside, so re-fit it.
+document.querySelectorAll('details.tableview').forEach(d => {
+  d.addEventListener('toggle', () => {
+    if (d.open) requestAnimationFrame(() => settleCharts(d.closest('.panel')));
+  });
+});
+
+// Window resize: do not rely on Plotly responsive alone, settle directly (debounced)
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => settleCharts(document.querySelector('.panel.active')), 150);
+});
+
+// ---- period controls ----
+// The x range applies to time-series charts only. Drag zoom still works,
+// and pressing 'All' resets both the set range and the drag zoom.
+(function initRanges() {
+  const DMIN = '{{ date_min }}', DMAX = '{{ date_max }}';
+  const iso = d => d.toISOString().slice(0, 10);
+
+  function spanStart(code) {
+    const end = new Date(DMAX + 'T00:00:00');
+    const d = new Date(end);
+    if (code === 'YTD') return new Date(end.getFullYear(), 0, 1);
+    const m = {'6M': 6, '1Y': 12, '3Y': 36, '5Y': 60, '10Y': 120}[code];
+    if (!m) return null;
+    d.setMonth(d.getMonth() - m);
+    return d;
+  }
+
+  document.querySelectorAll('.cardrange').forEach(bar => {
+    const scope = bar.dataset.scope;
+    const from = bar.querySelector('.crfrom');
+    const to   = bar.querySelector('.crto');
+    const btns = Array.from(bar.querySelectorAll('.rbtn[data-span]'));
+    from.value = DMIN; to.value = DMAX;
+
+    function apply(r, activeBtn) {
+      if (r) RANGES[scope] = r; else delete RANGES[scope];   // none = full range
+      btns.forEach(b => b.classList.toggle('on', b === activeBtn));
+      if (r) { from.value = r[0]; to.value = r[1]; }
+      else   { from.value = DMIN; to.value = DMAX; }
+      // Redraw only this card's chart (force, to bake the range into the layout)
+      // Charts drawn directly by JS are not in CHARTS, so call their own redraw
+      if (scope === 'expo') {
+        if (window.__expoRedraw) window.__expoRedraw();
+        return;
+      }
+      if (scope === 'cumflow') {
+        if (window.__cumFlowRedraw) window.__cumFlowRedraw();
+        return;
+      }
+      const el = document.getElementById('chart-' + scope);
+      if (!el) return;
+      const id = el.dataset.pending || el.dataset.chart;
+      if (!id) return;
+      if (isVisible(el)) renderInto(el, id, true);
+      else { el.dataset.pending = id; delete el.dataset.rendered; }
+    }
+
+    btns.forEach(b => b.addEventListener('click', () => {
+      const code = b.dataset.span;
+      if (code === 'ALL') return apply(null, b);
+      const s = spanStart(code);
+      if (!s) return;
+      const lo = iso(s) < DMIN ? DMIN : iso(s);
+      apply([lo, DMAX], b);
+    }));
+
+    bar.querySelector('.crapply').addEventListener('click', () => {
+      let a = from.value || DMIN, b2 = to.value || DMAX;
+      if (a > b2) { const t = a; a = b2; b2 = t; from.value = a; to.value = b2; }
+      apply([a, b2], null);
+    });
+    [from, to].forEach(i => i.addEventListener('change', () => {
+      btns.forEach(b => b.classList.remove('on'));
+    }));
+  });
+})();
+
+// ---- combined scenario card ----
+// Merges the "required trades by asset class ($BN)" and "projected positions (% by asset)" cards.
+// They were the same bar chart with three axes (level, metric, unit) fixed differently.
+// Only ratios are loaded and $BN is computed in the browser as ratio x AUM, so it responds to the AUM input for free.
+const SG = {{ scenario_grid_json | safe }};
+
+(function initScenario() {
+  if (!SG) return;
+  const el   = document.getElementById('chart-scen');
+  const tbl  = document.getElementById('table-scen');
+  const sel  = document.getElementById('scDriver');
+  const moves = document.getElementById('scMoves');
+  if (!el || !sel) return;
+
+  let driver = SG.default_driver;
+  let metric = 'trades';     // 'trades' | 'positions'
+  let unit   = 'usd';        // 'usd' | 'pct'
+  // 'asset' (asset bars) | 'heat' (asset heatmap).
+  // Asset class bars were dropped: four bars are not enough to judge, and asset class totals
+  // are shown as a time series by the 'by asset' chart on the Exposure tab. The heatmap only
+  // makes sense at asset level, so it is merged into this toggle instead of a separate one.
+  let level  = 'asset';
+
+  if (SG.indep_key) {                       // default mode of the absorbed heatmap card
+    const o = document.createElement('option');
+    o.value = SG.indep_key; o.textContent = SG.indep_label;
+    sel.appendChild(o);
+  }
+  SG.drivers.forEach(d => {
+    const o = document.createElement('option');
+    o.value = d.code; o.textContent = d.label;
+    if (d.code === driver) o.selected = true;
+    sel.appendChild(o);
+  });
+
+  const dataLevel = () => level === 'sector' ? 'sector' : 'asset';
+  const labels = () => level === 'sector' ? SG.sectors : SG.assets;
+  const tick = c => level === 'sector' ? c : c + ' · ' + (SG.names[c] || c);
+  // $BN = ratio per $1 of benchmark x AUM ($BN), so one multiplication is enough.
+  const scale = () => unit === 'usd' ? aumNow : 100;
+  function fmt(v) {
+    const sign = v < 0 ? '-' : '+';
+    // The sign goes before the $ symbol (-$3.2B). Math.abs is used, so the sign is attached explicitly.
+    return unit === 'usd'
+      ? sign + '$' + Math.abs(v).toLocaleString('en-US', {maximumFractionDigits: 1}) + 'B'
+      : sign + Math.abs(v).toFixed(1) + 'pp';
+  }
+
+  // Asset heatmap: absorbs the former 'market detail' card.
+  // Viewing 16 x 5 on one screen is denser than bars (80 bars are hard to read).
+  // Global asset class filter: only indexes of SG.assets in the selected asset class (data arrays are index-aligned)
+  const ixs = () => SG.assets.map((c, i) => i).filter(i => inSector(SG.assets[i]));
+  function buildHeat() {
+    const D = SG.data[driver], k = scale();
+    const src = D.asset[metric];
+    const keys = SG.scenarios.map(sc => sc.key);
+    const ix = ixs();
+    const z = ix.map(i => keys.map(key => {
+      const v = (src[key] || [])[i];
+      return v == null ? null : v * k;
+    }));
+    let lim = 0;
+    z.forEach(row => row.forEach(v => { if (v != null) lim = Math.max(lim, Math.abs(v)); }));
+    lim = lim || 1;
+    const C = SG.bar_colors[currentTheme()] || SG.bar_colors.light;
+    return [{
+      type: 'heatmap',
+      x: SG.scenarios.map(sc => sc.label),
+      y: ix.map(i => SG.assets[i] + ' · ' + (SG.names[SG.assets[i]] || SG.assets[i])),
+      z: z, zmid: 0, zmin: -lim, zmax: lim,
+      colorscale: C.scale,
+      text: z.map(row => row.map(v => v == null ? '' : fmt(v))),
+      texttemplate: '%{text}', textfont: {size: 10},
+      hovertemplate: '%{y}<br>%{x}<br>%{text}<extra></extra>',
+      colorbar: {title: {text: unit === 'usd' ? '$BN' : 'pp', font: {size: 11}},
+                 thickness: 10, len: 0.85, outlinewidth: 0},
+    }];
+  }
+
+  function build() {
+    const D = SG.data[driver];
+    const src = D[dataLevel()][metric];
+    const k = scale();
+    const ix = dataLevel() === 'asset' ? ixs() : labels().map((c, i) => i);
+    const xs = ix.map(i => tick(labels()[i]));
+    const dark = currentTheme() === 'dark';
+    const traces = SG.scenarios.map(function (sc, i) {
+      const full = src[sc.key] || [];
+      const vals = ix.map(j => full[j]).map(v => v == null ? null : v * k);
+      return {
+        type: 'bar', x: xs, y: vals, name: sc.label,
+        marker: {color: (SG.scen_colors[currentTheme()] || SG.scen_colors.light)[i],
+                 line: {width: 2, color: dark ? '#1a1a19' : '#fcfcfb'}},
+        customdata: vals.map(v => v == null ? '-' : fmt(v)),
+        hovertemplate: '%{x}<br>' + sc.label + '<br>%{customdata}<extra></extra>',
+      };
+    });
+    // Projected positions are a 'level', so overlay the current position as a reference marker.
+    // Required trades are already a delta vs current, so 0 is the baseline and no marker is needed.
+    if (metric === 'positions') {
+      const cur = ix.map(j => D.current[dataLevel()][j]);
+      traces.push({
+        type: 'scatter', mode: 'markers', name: 'Current',
+        x: xs, y: cur.map(v => v == null ? null : v * k),
+        marker: {symbol: 'line-ew', size: 18,
+                 line: {color: dark ? '#ffffff' : '#0b0b0b', width: 2}},
+        customdata: cur.map(v => v == null ? '-' : fmt(v * k)),
+        hovertemplate: '%{x}<br>Current %{customdata}<extra></extra>',
+      });
+    }
+    return traces;
+  }
+
+  function redraw() {
+    const dark = currentTheme() === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+    const heat = level === 'heat';
+    const wide = level === 'asset';
+    if (heat) {
+      const hl = {
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        font: {size: 12, color: ink}, margin: {l: 190, r: 16, t: 16, b: 52},
+        height: 30 * ixs().length + 90, hovermode: 'closest', dragmode: false,
+        hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+        xaxis: {type: 'category', side: 'top', showgrid: false, zeroline: false,
+                linecolor: bl, linewidth: 1, tickcolor: bl,
+                tickfont: {color: muted, size: 11}},
+        yaxis: {type: 'category', autorange: 'reversed', showgrid: false,
+                zeroline: false, automargin: false,
+                tickfont: {color: muted, size: 11}},
+      };
+      el.style.height = hl.height + 'px';
+      Plotly.react(el, buildHeat(), hl,
+                   {responsive: true, displayModeBar: false, locale: 'en'})
+        .then(() => { try { Plotly.Plots.resize(el); } catch (e) {} });
+      drawMoves();
+      drawTable();
+      return;
+    }
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink},
+      margin: {l: 66, r: 24, t: 16, b: wide ? 108 : 46},
+      height: wide ? 500 : 440, barmode: 'group', bargap: 0.28,
+      hovermode: 'closest', dragmode: false,
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'left', x: 0,
+               bgcolor: 'rgba(0,0,0,0)', font: {color: ink, size: 11}},
+      xaxis: {type: 'category', showgrid: false, zeroline: false,
+              linecolor: bl, linewidth: 1, tickcolor: bl,
+              tickangle: wide ? -45 : 0, tickfont: {color: muted, size: 11}},
+      yaxis: {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: true,
+              zerolinecolor: bl, zerolinewidth: 1, showline: false,
+              tickformat: unit === 'usd' ? ',.0f' : '+,.0f',
+              ticksuffix: unit === 'usd' ? '' : 'pp',
+              title: {text: (metric === 'trades' ? 'Required trades' : 'Projected positions') +
+                            (unit === 'usd' ? ', $BN' : ', pp') + '  (+ buy / − sell)',
+                      font: {color: muted, size: 11}},
+              tickfont: {color: muted, size: 11}},
+    };
+    el.style.height = layout.height + 'px';
+    Plotly.react(el, build(), layout,
+                 {responsive: true, displayModeBar: false, locale: 'en'})
+        .then(() => { try { Plotly.Plots.resize(el); } catch (e) {} });
+
+    drawMoves();
+    drawTable();
+  }
+
+  // 'Assumption' line. In independent mode the shock differs per market and driver_move() is empty,
+  // so it is written as a multiple of sigma, not %, which is the definition of independent mode.
+  function drawMoves() {
+    if (driver === SG.indep_key) {
+      moves.textContent = 'Assumption: ' + SG.scenarios.map(
+        sc => sc.label + ' ' + (sc.sigma >= 0 ? '+' : '') + sc.sigma.toFixed(2) + 'σ'
+      ).join(' · ') + '   (each market moves independently by its own volatility)';
+      return;
+    }
+    const mv = SG.data[driver].moves;
+    const w = wtdText(driver);
+    moves.textContent = 'Assumption: ' + SG.scenarios.map(
+      sc => sc.label + ' ' + (mv[sc.key] >= 0 ? '+' : '') +
+            (mv[sc.key] * 100).toFixed(1) + '%').join(' · ')
+      + '   |   Realized this week ' + (w == null ? '- ' + wtdWindow()
+                                       : w + ' ' + wtdWindow());
+  }
+
+  // Table: exactly the combination being viewed (the heatmap also uses the asset table)
+  function drawTable() {
+    const D = SG.data[driver], lv = dataLevel();
+    const src = D[lv][metric], k = scale();
+    const allNames = lv === 'sector' ? SG.sectors : SG.assets;
+    const ixT = lv === 'asset' ? ixs() : allNames.map((c, i) => i);
+    const rows = ixT.map(i => [allNames[i], i]).map(([c, i]) =>
+      '<tr><th>' + (lv === 'sector' ? c : c + ' · ' + (SG.names[c] || c)) + '</th>' +
+      SG.scenarios.map(sc => {
+        const v = (src[sc.key] || [])[i];
+        return '<td>' + (v == null ? '-' : fmt(v * k)) + '</td>';
+      }).join('') +
+      (metric === 'positions'
+        ? '<td>' + (D.current[lv][i] == null ? '-' : fmt(D.current[lv][i] * k)) + '</td>'
+        : '') + '</tr>');
+    tbl.innerHTML = '<table class="data-table"><thead><tr><th>' +
+      (lv === 'sector' ? 'Asset class' : 'Market') + '</th>' +
+      SG.scenarios.map(sc => '<th>' + sc.label + '</th>').join('') +
+      (metric === 'positions' ? '<th>Current</th>' : '') +
+      '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
+  }
+
+  sel.addEventListener('change', () => { driver = sel.value; redraw(); });
+  const wire = (id, set) => {
+    const bar = document.getElementById(id);
+    bar.querySelectorAll('.ubtn').forEach(b => b.addEventListener('click', () => {
+      bar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+      set(b.dataset.opt); redraw();
+    }));
+  };
+  wire('scMetric', v => { metric = v; });
+  wire('scUnit',   v => { unit = v; });
+  wire('scLevel',  v => { level = v; });
+
+  window.__scenRedraw = redraw;
+  requestAnimationFrame(redraw);
+})();
+
+// ---- hide an asset by clicking its y-axis name (shared) ----
+// Plotly gives no click event for axis tick labels, so after rendering, attach
+// a listener directly to the <g class="ytick"><text> elements in the SVG.
+// The DOM is redrawn on every react(), so the listener must be re-attached each time.
+function bindYTickHide(el, labelToCode, onHide) {
+  const codes = {};
+  Object.keys(labelToCode).forEach(function (k) { codes[labelToCode[k]] = 1; });
+  el.querySelectorAll('g.ytick text').forEach(function (t) {
+    // data-unformatted holds the original label (before wrapping/truncation)
+    const raw = (t.getAttribute('data-unformatted') || t.textContent || '').trim();
+    let code = labelToCode[raw] || labelToCode[(t.textContent || '').trim()];
+    if (!code) {                              // last resort: leading code token
+      const first = raw.split(' ')[0];
+      if (codes[first]) code = first;
+    }
+    if (!code) return;
+    // Plotly sets pointer-events: none on the axis layer.
+    // Unless this is lifted, clicks never arrive even with a listener attached.
+    t.style.pointerEvents = 'all';
+    t.style.cursor = 'pointer';
+    if (t.parentNode && t.parentNode.style) t.parentNode.style.pointerEvents = 'all';
+    t.addEventListener('click', function (e) { e.stopPropagation(); onHide(code); });
+  });
+}
+
+// List hidden assets as chips. Clicking a chip restores it, and redrawing puts it back in its sorted position.
+function renderHideChips(bar, hidden, nameOf, onRestore, onRestoreAll) {
+  if (!bar) return;
+  const wrap = bar.querySelector('.hchips');
+  const list = Array.from(hidden);
+  bar.hidden = list.length === 0;
+  wrap.innerHTML = '';
+  list.forEach(function (code) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hchip';
+    b.textContent = code;
+    b.title = nameOf(code) + ' (click to show it on the chart again)';
+    b.addEventListener('click', function () { onRestore(code); });
+    wrap.appendChild(b);
+  });
+  const all = bar.querySelector('.hall');
+  if (all && !all.dataset.wired) {
+    all.dataset.wired = '1';
+    all.addEventListener('click', onRestoreAll);
+  }
+}
+
+// ---- current positions ----
+// In JSON baked by plotly.py, arrays are base64 binary and hard to filter in the browser.
+// Supporting hide requires touching the data, so the chart is drawn here directly (values reuse SG).
+// WTD display helper: the part of the week elapsed that is not yet in the model
+const WTD = SG ? (SG.wtd || {}) : {};
+const WTD_META = SG ? (SG.wtd_meta || {days: 0}) : {days: 0};
+function wtdOf(code) {
+  const v = WTD[code];
+  return (WTD_META.days > 0 && v != null) ? v : null;
+}
+function wtdText(code) {
+  const v = wtdOf(code);
+  if (v == null) return null;
+  return (v >= 0 ? '+' : '-') + Math.abs(v * 100).toFixed(2) + '%';
+}
+function wtdWindow() {
+  if (!WTD_META.days) return 'no new data';
+  return WTD_META.from + ' → ' + WTD_META.to + ' (' + WTD_META.days + ' business days)';
+}
+
+// Risk contribution grid: signed |w|·σ share (Σ|·| = 1). If null, the toggle is not shown.
+const RG = {{ risk_grid_json | safe }};
+
+(function initCurrentPos() {
+  if (!SG) return;
+  const el = document.getElementById('chart-current');
+  const bar = document.getElementById('cpHidden');
+  if (!el) return;
+
+  const hidden = new Set();
+  const cur = SG.data[SG.default_driver].current.asset;   // independent of the driver
+  const nameOf = c => SG.names[c] || c;
+  const DOT = String.fromCharCode(0xB7);
+  const ARROW = String.fromCharCode(0x2192);
+
+  // 'pct' = notional per $1 of benchmark / 'risk' = signed risk contribution share
+  let cpUnit = 'pct';
+  const valueOf = (code, i) => cpUnit === 'risk'
+    ? (RG ? RG.risk_signed[code] : null)
+    : cur[i];
+
+  // One-line asset class contrast: shows where notional and risk diverge without using the toggle.
+  (function sectorLine() {
+    const sum = document.getElementById('cpSum');
+    if (!sum || !RG) return;
+    sum.innerHTML = RG.sectors.map(function (s) {
+      const n = RG.sector_notional[s], r = RG.sector_risk[s];
+      if (n == null || r == null) return '';
+      return s + ' ' + (n * 100).toFixed(0) + '% ' + ARROW + ' ' +
+             (r * 100).toFixed(0) + '%';
+    }).filter(Boolean).join('  ' + DOT + '  ')
+      + '  <span class="muted">(notional ' + ARROW + ' risk share)</span>';
+  })();
+
+  function redraw() {
+    const th = currentTheme();
+    const C = SG.bar_colors[th] || SG.bar_colors.light;
+    const dark = th === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+
+    // Ascending by position (same as the original chart): a restored asset is reinserted in this order.
+    // In the risk view it is re-sorted by risk contribution (that is the point of that view).
+    const R = SG.assets
+      .map((c, i) => ({code: c, name: nameOf(c), pct: valueOf(c, i),
+                       notional: cur[i]}))
+      .filter(r => r.pct != null && !hidden.has(r.code) && inSector(r.code))
+      .sort((a, b) => a.pct - b.pct);
+
+    const labelToCode = {};
+    const y = R.map(function (r) {
+      const lab = r.code + ' ' + DOT + ' ' + r.name;
+      labelToCode[lab] = r.code;
+      return lab;
+    });
+
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink}, margin: {l: 190, r: 72, t: 16, b: 44},
+      height: Math.max(240, 30 * R.length + 60), hovermode: 'closest', dragmode: false,
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      xaxis: {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: true,
+              zerolinecolor: bl, zerolinewidth: 1, showline: false,
+              tickformat: '+.0%', tickfont: {color: muted, size: 11},
+              title: cpUnit === 'risk'
+                ? {text: 'Risk contribution share (signed)', font: {color: muted, size: 11}}
+                : undefined},
+      yaxis: {showgrid: false, zeroline: false, type: 'category', automargin: false,
+              tickmode: 'array', tickvals: y, ticktext: y,
+              tickfont: {color: muted, size: 11}},
+    };
+    el.style.height = layout.height + 'px';
+    Plotly.react(el, [{
+      type: 'bar', orientation: 'h', y: y, x: R.map(r => r.pct),
+      marker: {color: R.map(r => r.pct > 0 ? C.pos : (r.pct < 0 ? C.neg : C.mid)),
+               line: {width: 2, color: surf}},
+      text: R.map(r => (r.pct >= 0 ? '+' : '-') + Math.abs(r.pct * 100).toFixed(0) + '%'),
+      textposition: 'outside', cliponaxis: false,
+      textfont: {size: 11, color: ink},
+      // [$BN, notional, risk contribution, σ_ann]: either view shows the other measures on hover
+      customdata: R.map(r => [r.notional * aumNow, r.notional,
+                              RG ? RG.risk_signed[r.code] : null,
+                              RG ? RG.vol_ann[r.code] : null]),
+      hovertemplate: !RG
+        ? '%{y}<br>%{x:+.1%} ' + DOT + ' $%{customdata[0]:+,.1f}B<extra></extra>'
+        : (cpUnit === 'risk'
+           ? '%{y}<br>Risk contribution %{x:+.1%} ' + DOT + ' ' + String.fromCharCode(0x3C3) +
+             ' %{customdata[3]:.1%}<br><span style="opacity:.7">Notional ' +
+             '%{customdata[1]:+.1%} ' + DOT + ' $%{customdata[0]:+,.1f}B</span><extra></extra>'
+           : '%{y}<br>Notional %{x:+.1%} ' + DOT + ' $%{customdata[0]:+,.1f}B' +
+             '<br><span style="opacity:.7">Risk contribution %{customdata[2]:+.1%} ' + DOT +
+             ' ' + String.fromCharCode(0x3C3) + ' %{customdata[3]:.1%}</span><extra></extra>'),
+      showlegend: false,
+    }], layout, {responsive: true, displayModeBar: false, locale: 'en'})
+      .then(function () {
+        try { Plotly.Plots.resize(el); } catch (e) {}
+        bindYTickHide(el, labelToCode, function (code) {
+          hidden.add(code); redraw();
+        });
+      });
+
+    renderHideChips(bar, hidden, nameOf,
+      function (code) { hidden.delete(code); redraw(); },
+      function () { hidden.clear(); redraw(); });
+  }
+
+  // Notional / risk contribution toggle
+  const cpBar = document.getElementById('cpUnit');
+  if (cpBar && RG) {
+    cpBar.addEventListener('click', function (ev) {
+      const b = ev.target.closest('.ubtn');
+      if (!b || b.dataset.opt === cpUnit) return;
+      cpUnit = b.dataset.opt;
+      cpBar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+      redraw();
+    });
+  }
+
+  window.__curPosRedraw = redraw;
+  requestAnimationFrame(redraw);
+})();
+
+// ---- certain trades ----
+// The "5-scenario average required trade" cannot be used: scenarios are symmetric, so up and
+// down cancel and only the flat-case trade (window roll-off) remains at 94%. So a lower bound
+// is used instead of an expectation.
+// If the sign does not change, the endpoint closest to 0 is the minimum amount that will trade.
+(function initCertain() {
+  if (!SG) return;
+  const el  = document.getElementById('chart-certain');
+  const tbl = document.getElementById('table-certain');
+  const sel = document.getElementById('ctDriver');
+  const sum = document.getElementById('ctSum');
+  if (!el || !sel) return;
+
+  let driver = SG.default_driver;
+  let unit = 'usd';
+  const keys = SG.scenarios.map(s => s.key);
+  const ctHiddenSet = new Set();                 // markets hidden by clicking the y-axis label
+  const ctBar = document.getElementById('ctHidden');
+
+  if (SG.indep_key) {              // case where each market moves independently by its own σ
+    const o = document.createElement('option');
+    o.value = SG.indep_key; o.textContent = SG.indep_label;
+    sel.appendChild(o);
+  }
+  SG.drivers.forEach(d => {
+    const o = document.createElement('option');
+    o.value = d.code; o.textContent = d.label;
+    if (d.code === driver) o.selected = true;
+    sel.appendChild(o);
+  });
+
+  const scale = () => unit === 'usd' ? aumNow : 100;
+  function fmt(v) {
+    const sign = v < 0 ? '-' : '+';
+    return unit === 'usd'
+      ? sign + '$' + Math.abs(v).toLocaleString('en-US', {maximumFractionDigits: 1}) + 'B'
+      : sign + Math.abs(v).toFixed(1) + 'pp';
+  }
+  const scLabel = {};
+  SG.scenarios.forEach(function (sc) { scLabel[sc.key] = sc.label; });
+  // "If ES Strong up (+3.0%)": also includes the return assumed by that scenario.
+  // Independent mode has no driver and the shock differs per market, so the market itself is used.
+  function cond(key, code) {
+    if (!key) return '';
+    const D = SG.data[driver];
+    const isIndep = driver === SG.indep_key;
+    let mv = null;
+    if (isIndep) {
+      const i = SG.assets.indexOf(code);
+      mv = (D.shocks && D.shocks[key]) ? D.shocks[key][i] : null;
+    } else {
+      mv = (D.moves || {})[key];
+    }
+    const pct = (mv == null) ? ''
+      : ' (' + (mv >= 0 ? '+' : '-') + Math.abs(mv * 100).toFixed(1) + '%)';
+    return 'If ' + (isIndep ? code : driver) + ' ' + (scLabel[key] || key) + pct;
+  }
+
+  // Per market [min, max, flat, certain, max]: after applying the unit scale
+  function rows() {
+    const D = SG.data[driver].asset, k = scale();
+    return SG.assets.map((code, i) => {
+      const vals = keys.map(key => (D.trades[key] || [])[i]).filter(v => v != null);
+      if (!vals.length) return null;
+      const lo = Math.min.apply(null, vals) * k;
+      const hi = Math.max.apply(null, vals) * k;
+      const flat = (D.trades.flat || [])[i] * k;
+      const fixed = (lo > 0 || hi < 0);
+      // Endpoint near 0 = certain (most favorable scenario), far endpoint = max (least favorable)
+      const near = fixed ? (Math.abs(lo) < Math.abs(hi) ? lo : hi) : 0;
+      const far = Math.abs(lo) > Math.abs(hi) ? lo : hi;
+      // Which scenario produces that endpoint: monotonic, so always one of the two extremes
+      let nearKey = null, farKey = null;
+      keys.forEach(function (key) {
+        const v = (D.trades[key] || [])[i];
+        if (v == null) return;
+        if (Math.abs(v * k - near) < 1e-9 && nearKey === null) nearKey = key;
+        if (Math.abs(v * k - far) < 1e-9 && farKey === null) farKey = key;
+      });
+      const ag = SG.agreement[code] || [0, 0, 0];
+      return {code: code, name: SG.names[code] || code, lo: lo, hi: hi,
+              flat: flat, fixed: fixed, near: near, far: far,
+              nearKey: nearKey, farKey: farKey, ag: ag};
+    }).filter(Boolean);
+  }
+
+  function redraw() {
+    const th = currentTheme();
+    const C = SG.bar_colors[th] || SG.bar_colors.light;
+    const dark = th === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+    const strong = dark ? '#ffffff' : '#0b0b0b';
+
+    // No sorting: the universe order (ES Z VG NK / TY G RX JB / EC BP JY AD /
+    // CL GC HG S) is used as is. Asset classes stay together, the axis matches the other
+    // charts on the dashboard, and rows do not jump when the card is redrawn.
+    const R = rows().filter(function (r) { return !ctHiddenSet.has(r.code) && inSector(r.code); });
+    const DOT = String.fromCharCode(0xB7);       // middle dot
+    const MINUS = String.fromCharCode(0x2212);   // true minus sign
+    const labelToCode = {};
+    const y = R.map(function (r) {
+      const side = r.ag[0] >= r.ag[1] ? r.ag[0] + '/' + SG.assets.length + ' sell'
+                                      : r.ag[1] + '/' + SG.assets.length + ' buy';
+      const lab = r.code + ' ' + DOT + ' ' + r.name + '   [' + side + ']';
+      labelToCode[lab] = r.code;
+      return lab;
+    });
+
+    const traces = [{
+      // Certain part: up to the endpoint closest to 0. This much trades regardless.
+      type: 'bar', orientation: 'h', name: 'Certain',
+      y: y, x: R.map(r => r.fixed ? r.near : (r.hi - r.lo)),
+      base: R.map(r => r.fixed ? 0 : r.lo),
+      marker: {color: R.map(r => r.fixed ? (r.near > 0 ? C.pos : C.neg) : C.mid),
+               line: {width: 2, color: surf}},
+      customdata: R.map(r => r.fixed
+        ? 'Certain ' + fmt(r.near) + '<br>' + cond(r.nearKey, r.code) + ', this is the smallest case'
+        : 'Direction not certain (' + fmt(r.lo) + ' ~ ' + fmt(r.hi) + ')'),
+      hovertemplate: '%{y}<br>%{customdata}<extra></extra>',
+      // Light/gray colors are below 3:1 contrast against the surface, so direct labels are required (dataviz rule)
+      text: R.map(r => r.fixed ? fmt(r.near) : 'Not certain'),
+      textposition: 'outside', cliponaxis: false,
+      textfont: {size: 10, color: ink},
+    }, {
+      // Scenario-dependent part: from the certain endpoint to the worst endpoint
+      type: 'bar', orientation: 'h', name: 'Scenario dependent',
+      y: y, x: R.map(r => r.fixed ? (r.far - r.near) : 0),
+      base: R.map(r => r.fixed ? r.near : 0),
+      // A light fill cannot be told apart from gray (not certain) in light mode (delta E 8.2).
+      // So the same hue plus a 45-degree hatch texture is used (pattern, not color).
+      marker: {color: R.map(r => r.near > 0 ? C.pos : C.neg),
+               pattern: {shape: R.map(r => '/'), bgcolor: surf, size: 5, solidity: 0.32},
+               line: {width: 2, color: surf}},
+      customdata: R.map(r => r.fixed
+        ? cond(r.farKey, r.code) + ',<br>' + fmt(r.far) + ' (max)' : ''),
+      hovertemplate: '%{y}<br>%{customdata}<extra></extra>',
+    }, {
+      type: 'scatter', mode: 'markers', name: 'If flat',
+      y: y, x: R.map(r => r.flat),
+      marker: {symbol: 'line-ns', size: 16, line: {color: strong, width: 2}},
+      customdata: R.map(r => fmt(r.flat)),
+      hovertemplate: '%{y}<br>Flat %{customdata}<extra></extra>',
+    }];
+
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink}, margin: {l: 250, r: 40, t: 16, b: 48},
+      height: 30 * R.length + 110, barmode: 'overlay', bargap: 0.34,
+      hovermode: 'closest', dragmode: false,
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'left', x: 0,
+               bgcolor: 'rgba(0,0,0,0)', font: {color: ink, size: 11}},
+      xaxis: {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: true,
+              zerolinecolor: bl, zerolinewidth: 1, showline: false,
+              tickformat: '+,.0f',
+              ticksuffix: unit === 'usd' ? '' : 'pp',
+              title: {text: (unit === 'usd' ? 'Required trades, $BN' : 'Required trades, pp') +
+                            '  (+ buy / ' + MINUS + ' sell)',
+                      font: {color: muted, size: 11}},
+              tickfont: {color: muted, size: 11}},
+      yaxis: {showgrid: false, zeroline: false, type: 'category',
+              autorange: 'reversed', automargin: false,
+              tickmode: 'array', tickvals: y, ticktext: y,
+              tickfont: {color: muted, size: 11}},
+    };
+    el.style.height = layout.height + 'px';
+    Plotly.react(el, traces, layout,
+                 {responsive: true, displayModeBar: false, locale: 'en'})
+      .then(function () {
+        try { Plotly.Plots.resize(el); } catch (e) {}
+        bindYTickHide(el, labelToCode, function (code) {
+          ctHiddenSet.add(code); redraw();
+        });
+      });
+
+    renderHideChips(ctBar, ctHiddenSet, c => SG.names[c] || c,
+      function (code) { ctHiddenSet.delete(code); redraw(); },
+      function () { ctHiddenSet.clear(); redraw(); });
+
+    const fx = R.filter(r => r.fixed);
+    const net = fx.reduce((a, r) => a + r.near, 0);
+    const sp = SG.sigma_span || [0, 0];
+    sum.textContent = 'Certain ' + fx.length + '/' + R.length + ' markets · certain net trade ' +
+      fmt(net) + ' · coverage ' + sp[0].toFixed(1) + 'σ ~ +' + sp[1].toFixed(1) + 'σ';
+
+    const sub = t => '<br><span class="muted" style="font-size:11px">' + t + '</span>';
+    tbl.innerHTML =
+      '<table class="data-table"><thead><tr><th>Market</th><th>Certain trade</th>' +
+      '<th>Max trade</th><th>If flat</th><th>Driver agreement</th>' +
+      '</tr></thead><tbody>' +
+      R.map(function (r) {
+        return '<tr><th>' + r.code + ' ' + DOT + ' ' + r.name + '</th>' +
+          '<td>' + (r.fixed ? '<b>' + fmt(r.near) + '</b>' + sub(cond(r.nearKey, r.code))
+                            : 'Not certain' + sub(fmt(r.lo) + ' ~ ' + fmt(r.hi))) + '</td>' +
+          '<td>' + (r.fixed ? fmt(r.far) + sub(cond(r.farKey, r.code)) : '-') + '</td>' +
+          '<td>' + fmt(r.flat) + sub('If ' + driver + ' Flat (+0.0%)') + '</td>' +
+          '<td>' + r.ag[0] + ' sell / ' + r.ag[1] + ' buy / ' + r.ag[2] + ' not certain</td>' +
+          '</tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  sel.addEventListener('change', function () { driver = sel.value; redraw(); });
+  document.getElementById('ctUnit').querySelectorAll('.ubtn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.getElementById('ctUnit').querySelectorAll('.ubtn')
+        .forEach(function (x) { x.classList.toggle('on', x === b); });
+      unit = b.dataset.opt; redraw();
+    });
+  });
+
+  window.__certainRedraw = redraw;
+  requestAnimationFrame(redraw);
+})();
+
+// ---- position overview (KPI, regime chips, asset class filter) ----
+// The percentile window is overview_pctile_years and the expand/shrink threshold is the per-market regime_flow_quantile (config.py). Only applied here.
+const OG = {{ overview_grid_json | safe }};
+
+(function initOverview() {
+  if (!OG) return;
+  const kpiEl = document.getElementById('ovKpi');
+  const tilesEl = document.getElementById('ovTiles');
+  const noteEl = document.getElementById('ovNote');
+  if (!kpiEl || !tilesEl) return;
+
+  const DOT = String.fromCharCode(0xB7);
+  const ARROW = String.fromCharCode(0x2192);
+  const pctS = (v, d) => (v >= 0 ? '+' : '-') + Math.abs(v * 100).toFixed(d == null ? 0 : d) + '%';
+  const usdS = v => (v >= 0 ? '+$' : '-$') + Math.abs(v).toLocaleString('en-US', {maximumFractionDigits: 1}) + 'B';
+
+  // First chip: percentile vs own history. 80% or above = long crowding (blue), 20% or below = short crowding (red)
+  function level(p) {
+    if (p == null) return {label: '-', kind: 'flat'};
+    return {label: 'Percentile ' + Math.round(p * 100) + '%',
+            kind: p >= 0.8 ? 'long' : p <= 0.2 ? 'short' : 'flat'};
+  }
+  // Flow over the last N weeks. kind: buy flow = long (blue), sell flow = short (red)
+  function flow(n, ch, thr) {
+    if (Math.abs(ch) < thr) return {label: 'Little change', kind: 'flat'};
+    if (n < 0) return ch < 0 ? {label: 'Short growing', kind: 'short'} : {label: 'Short shrinking', kind: 'long'};
+    if (n > 0) return ch > 0 ? {label: 'Long growing', kind: 'long'} : {label: 'Long shrinking', kind: 'short'};
+    return ch > 0 ? {label: 'Buy flow', kind: 'long'} : {label: 'Sell flow', kind: 'short'};
+  }
+
+  function rows() {
+    return OG.assets.map(function (code, i) {
+      if (OG.notional[i] == null) return null;
+      const n = OG.notional[i], ch = OG.change[i] == null ? 0 : OG.change[i];
+      return {code: code, name: OG.names[code] || code, sector: OG.sector_of[code],
+              n: n, ch: ch, lv: level(OG.pctile[i]), fl: flow(n, ch, OG.flow_threshold[i] == null ? Infinity : OG.flow_threshold[i])};
+    }).filter(Boolean);
+  }
+
+  function redraw() {
+    const C = OG.bar_colors[currentTheme()] || OG.bar_colors.light;
+    const col = k => k === 'long' ? C.pos : k === 'short' ? C.neg : C.mid;
+    const chip = k => 'color:' + col(k) + ';border-color:' + col(k) +
+      ';background:color-mix(in srgb,' + col(k) + ' 14%,transparent)';
+    const R = rows().filter(r => inSector(r.code));
+    if (!R.length) { kpiEl.innerHTML = ''; tilesEl.innerHTML = ''; return; }
+
+    // -- 4 KPI cells --
+    const net = R.reduce((a, r) => a + r.n, 0);
+    const byN = R.slice().sort((a, b) => b.n - a.n);
+    const topL = byN[0], topS = byN[byN.length - 1];
+    const topC = R.slice().sort((a, b) => Math.abs(b.ch) - Math.abs(a.ch))[0];
+    const card = (label, value, sub, color) =>
+      '<div class="kpi"><span class="kl">' + label + '</span><span class="kv"' +
+      (color ? ' style="color:' + color + '"' : '') + '>' + value + '</span>' +
+      '<span class="ks">' + sub + '</span></div>';
+    kpiEl.innerHTML =
+      card('Net notional', pctS(net, 0), usdS(net * aumNow) + ' ' + DOT + ' ' + R.length + ' markets',
+           net >= 0 ? C.pos : C.neg) +
+      card('Largest long', topL.n > 0 ? topL.code : '-',
+           topL.n > 0 ? topL.name + ' ' + DOT + ' ' + pctS(topL.n) : 'No long positions', C.pos) +
+      card('Largest short', topS.n < 0 ? topS.code : '-',
+           topS.n < 0 ? topS.name + ' ' + DOT + ' ' + pctS(topS.n) : 'No short positions', C.neg) +
+      card('Largest ' + OG.flow_weeks + 'w change', topC.code,
+           topC.name + ' ' + DOT + ' ' + (topC.ch >= 0 ? '+' : '-') +
+           Math.abs(topC.ch * 100).toFixed(0) + 'pp', topC.ch >= 0 ? C.pos : C.neg);
+
+    // -- per-market tiles (universe order: asset classes stay together) --
+    tilesEl.innerHTML = R.map(function (r) {
+      const sel = (window.__instrCode && window.__instrCode() === r.code) ? ' sel' : '';
+      return '<div class="ovtile' + sel + '" data-code="' + r.code +
+        '" title="Click to switch the price chart to this market. Percentile = current position within the last ' + OG.pctile_years +
+        ' years of notional history (0% = largest short, 100% = largest long)" style="border-left-color:' +
+        (r.n >= 0 ? C.pos : C.neg) + '">' +
+        '<span class="tc">' + r.code + '</span><span class="tn">' + r.name + '</span>' +
+        '<span class="tv" style="color:' + (r.n >= 0 ? C.pos : C.neg) + '">' + pctS(r.n) +
+        '<span class="td">(' + OG.flow_weeks + 'w ' + (r.ch >= 0 ? '+' : '-') +
+        Math.abs(r.ch * 100).toFixed(0) + 'pp)</span></span>' +
+        '<span class="chips">' +
+        '<span class="regchip" style="' + chip(r.lv.kind) + '">' + r.lv.label + '</span>' +
+        '<span class="regchip" style="' + chip(r.fl.kind) + '">' + r.fl.label + '</span></span></div>';
+    }).join('');
+
+    noteEl.textContent = 'As of ' + OG.asof + ' / Percentile: ' + OG.pctile_years + 'y window';
+  }
+
+  tilesEl.addEventListener('click', function (e) {
+    const t = e.target.closest('.ovtile');
+    if (t && window.__setInstrument) window.__setInstrument(t.dataset.code);
+  });
+  window.__overviewRedraw = redraw;
+  requestAnimationFrame(redraw);
+})();
+
+// ---- price and flip price ----
+// The flip price (trigger) is computed in Python; here it is only overlaid on the price.
+// The price is the raw contract (C1). The upper panel is price, the lower panel is weekly notional, and the x axis is shared (not a dual axis).
+const PF = {{ price_grid_json | safe }};
+
+(function initPriceFlip() {
+  if (!PF) return;
+  const el = document.getElementById('chart-priceflip');
+  const sel = document.getElementById('instrSel');
+  const tblEl = document.getElementById('pfTable');
+  const rng = document.getElementById('pfRange');
+  if (!el || !sel) return;
+
+  let code = PF.default, months = 24;
+  const legEl = document.getElementById('pfLegend');
+  const showH = {};                       // dotted line visibility per horizon (kept when the market changes)
+  (PF.horizons || []).forEach(h => { showH[h] = true; });
+  if (legEl) {
+    legEl.innerHTML = (PF.horizons || []).map(h =>
+      '<button type="button" class="pflbtn" data-h="' + h + '" aria-pressed="true" style="color:' +
+      ((PF.horizon_colors || {})[String(h)] || 'inherit') + '"><i></i><span style="color:var(--text-secondary)">' +
+      h + 'w flip</span></button>').join('');
+    legEl.addEventListener('click', function (e) {
+      const b = e.target.closest('.pflbtn');
+      if (!b) return;
+      const h = parseInt(b.dataset.h, 10);
+      showH[h] = !showH[h];
+      b.setAttribute('aria-pressed', String(showH[h]));
+      redraw();
+    });
+  }
+  const DOT = String.fromCharCode(0xB7);
+  const ARROW = String.fromCharCode(0x2192);
+  const SIGMA = String.fromCharCode(0x3C3);
+  // The market dropdown lists only markets in the global asset class. If the selected market drops out, switch to the nearest flip market.
+  let optSig = '';
+  function syncOptions() {
+    const list = PF.assets.filter(inSector);
+    const sig = list.join(',');
+    if (sig === optSig) return;
+    optSig = sig;
+    if (list.indexOf(code) < 0) {
+      const sg = c => { const f = (PF.meta[c].flip_h || {})[String(PF.horizon)]; return f ? f.sigma : null; };
+      const near = list.filter(c => sg(c) != null)
+        .sort((a, b) => Math.abs(sg(a)) - Math.abs(sg(b)));
+      code = near.length ? near[0] : (list[0] || code);
+    }
+    sel.innerHTML = '';
+    list.forEach(function (c) {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c + ' ' + DOT + ' ' + (PF.names[c] || c);
+      if (c === code) o.selected = true;
+      sel.appendChild(o);
+    });
+  }
+  syncOptions();
+  window.__instrSync = syncOptions;
+  window.__instrCode = () => code;
+  window.__setInstrument = function (c) {
+    if (PF.assets.indexOf(c) < 0) return;
+    code = c; syncOptions(); sel.value = c; redraw();
+    if (window.__overviewRedraw) window.__overviewRedraw();
+  };
+
+  const pxS = v => v == null ? '-' : (Math.abs(v) >= 100 ? v.toLocaleString('en-US', {maximumFractionDigits: 2})
+                                                          : v.toFixed(4));
+  const pctS = (v, d) => (v >= 0 ? '+' : '-') + Math.abs(v * 100).toFixed(d);
+
+  function redraw() {
+    syncOptions();
+    const th = currentTheme();
+    const C = PF.bar_colors[th] || PF.bar_colors.light;
+    const dark = th === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const strong = dark ? '#ffffff' : '#0b0b0b';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+    const m = PF.meta[code];
+
+    // Display range: from N months before the last date
+    const last = PF.dates[PF.dates.length - 1];
+    const cut = new Date(last); cut.setMonth(cut.getMonth() - months);
+    const cutS = cut.toISOString().slice(0, 10);
+    const ix = [];
+    PF.dates.forEach((d, i) => { if (d >= cutS && PF.price[code][i] != null) ix.push(i); });
+    const x = ix.map(i => PF.dates[i]), y = ix.map(i => PF.price[code][i]);
+    const pix = [];
+    PF.pos_dates.forEach((d, i) => { if (d >= cutS) pix.push(i); });
+    const px_ = pix.map(i => PF.pos_dates[i]);
+    const pv = pix.map(i => PF.pos[code][i]);
+    if (!y.length) { Plotly.purge(el); return; }
+
+    const pmin = Math.min.apply(null, y), pmax = Math.max.apply(null, y), span = pmax - pmin;
+    // A flip price too far from the display range ruins the axis, so the line is dropped and only text is shown.
+    // Flip price per horizon (1w, 4w). Each is drawn dotted; if outside the display range, only text is shown instead of a line.
+    const FL = (PF.horizons || []).map(function (h) {
+      const f = (m.flip_h || {})[String(h)] || {};
+      const has = f.price != null;
+      return {
+        h: h, f: f, has: has,
+        near: has && f.price >= pmin - span && f.price <= pmax + span,
+        dir: f.flat_pos == null ? '' : (f.flat_pos > 0 ? 'Long ' + ARROW + ' Short' : 'Short ' + ARROW + ' Long'),
+        col:(PF.horizon_colors || {})[String(h)] || C.mid,
+      };
+    });
+
+    const traces = [{
+      type: 'scatter', mode: 'lines', x: x, y: y, xaxis: 'x', yaxis: 'y',
+      line: {color: strong, width: 2}, connectgaps: true, showlegend: false,
+      hovertemplate: '%{x}<br>%{y:,.4~f}<extra></extra>',
+    }, {
+      type: 'scatter', mode: 'markers+text', x: [x[x.length - 1]], y: [y[y.length - 1]],
+      xaxis: 'x', yaxis: 'y', showlegend: false,
+      marker: {size: 8, color: strong, line: {width: 2, color: surf}},
+      text: [pxS(y[y.length - 1])], textposition: 'top left', textfont: {size: 11, color: ink},
+      hovertemplate: 'Latest close ' + pxS(y[y.length - 1]) + (m.asof ? ' (' + m.asof + ')' : '') + '<extra></extra>',
+    }];
+    // Net long flip / net short flip: triangle at the close of the week the position sign changed
+    const fl = (m.flips || []).filter(f => f[0] >= cutS && f[1] != null);
+    [['long', 'Net long flip', 'triangle-up', C.pos], ['short', 'Net short flip', 'triangle-down', C.neg]]
+      .forEach(function (k) {
+        const f = fl.filter(v => v[2] === k[0]);
+        if (!f.length) return;
+        traces.push({
+          type: 'scatter', mode: 'markers', x: f.map(v => v[0]), y: f.map(v => v[1]),
+          xaxis: 'x', yaxis: 'y', showlegend: false,
+          marker: {symbol: k[2], size: 12, color: k[3], line: {width: 1.5, color: surf}},
+          customdata: f.map(v => v[0]),
+          hovertemplate: k[1] + '<br>%{customdata}' + '<br>%{y:,.4~f}<extra></extra>',
+        });
+      });
+    const FV = FL.filter(z => z.near && showH[z.h]);
+    FV.forEach(function (z) {
+      traces.push({
+        type: 'scatter', mode: 'lines', x: [x[0], x[x.length - 1]], y: [z.f.price, z.f.price],
+        xaxis: 'x', yaxis: 'y', showlegend: false, line: {color: z.col, width: 2, dash: 'dot'},
+        hovertemplate: z.h + 'w flip price ' + pxS(z.f.price) + '<br>' + z.dir + '<extra></extra>',
+      });
+    });
+    traces.push({
+      type: 'scatter', mode: 'lines', x: px_, y: pv.map(v => v == null ? null : Math.max(v, 0)),
+      xaxis: 'x', yaxis: 'y2', fill: 'tozeroy', fillcolor: C.posFade, showlegend: false,
+      line: {color: C.pos, width: 1.5, shape: 'hv'},
+      hovertemplate: '%{x}<br>Notional %{customdata:+.1%}<extra></extra>',
+      customdata: pv,
+    }, {
+      type: 'scatter', mode: 'lines', x: px_, y: pv.map(v => v == null ? null : Math.min(v, 0)),
+      xaxis: 'x', yaxis: 'y2', fill: 'tozeroy', fillcolor: C.negFade, showlegend: false,
+      line: {color: C.neg, width: 1.5, shape: 'hv'}, hoverinfo: 'skip',
+    });
+
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink}, margin: {l: 64, r: 24, t: 12, b: 36}, height: 520,
+      hovermode: 'closest', dragmode: false,
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      xaxis: {anchor: 'y2', showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: false,
+              tickfont: {color: muted, size: 11}},
+      yaxis: {domain: [0.32, 1], showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: false,
+              tickformat: ',.6~g', tickfont: {color: muted, size: 11}},
+      yaxis2: {domain: [0, 0.24], showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: true,
+               zerolinecolor: bl, tickformat: '+.0%', tickfont: {color: muted, size: 11},
+               title: {text: 'Exposure', font: {color: muted, size: 11}}},
+      // The 1w label goes top left and the 4w label top right so they do not overlap even when the two lines are close
+      annotations: FV.map(function (z) {
+        const left = z.h === Math.min.apply(null, PF.horizons);
+        return {
+          xref: 'x', yref: 'y', x: left ? x[0] : x[x.length - 1], y: z.f.price,
+          xanchor: left ? 'left' : 'right', yanchor: 'bottom',
+          showarrow: false, font: {size: 11, color: z.col},
+          text: z.h + 'w flip ' + pxS(z.f.price) + ' (' + pctS(z.f.move, 1) + '%, ' + z.dir + ')',
+        };
+      }),
+    };
+    el.style.height = layout.height + 'px';
+    Plotly.react(el, traces, layout, {responsive: true, displayModeBar: false, locale: 'en'})
+      .then(function () { try { Plotly.Plots.resize(el); } catch (e) {} });
+
+    drawTable();
+  }
+
+  // Table below the chart: all markets passing the asset class filter. Clicking a row switches the chart to that market.
+  const pctP = v => v == null ? '-' : (v >= 0 ? '+' : '-') + Math.abs(v * 100).toFixed(0) + '%';
+  function flipCell(mm, h) {
+    const f = (mm.flip_h || {})[String(h)] || {};
+    if (f.price == null) return '<span class="muted">None</span>';
+    const dir = f.flat_pos == null ? '' : (f.flat_pos > 0 ? 'Long ' + ARROW + ' Short' : 'Short ' + ARROW + ' Long');
+    return '<b>' + pxS(f.price) + '</b><br><span class="muted" style="font-size:11px">' +
+      pctS(f.move, 1) + '%' + (f.sigma != null ? ' ' + DOT + ' ' + (f.sigma >= 0 ? '+' : '-') +
+      Math.abs(f.sigma).toFixed(1) + SIGMA : '') + ' ' + DOT + ' ' + dir + '</span>';
+  }
+  function drawTable() {
+    if (!tblEl) return;
+    const hs = PF.horizons || [];
+    const list = PF.assets.filter(inSector);
+    const oi = {};
+    if (typeof OG !== 'undefined' && OG) OG.assets.forEach((c, i) => { oi[c] = i; });
+    const rowsH = list.map(function (c) {
+      const mm = PF.meta[c], i = oi[c];
+      const n = i == null ? null : OG.notional[i];
+      const ch = i == null ? null : OG.change[i];
+      const pc = i == null ? null : OG.pctile[i];
+      const C = PF.bar_colors[currentTheme()] || PF.bar_colors.light;
+      const col = v => v == null ? '' : ' style="color:' + (v >= 0 ? C.pos : C.neg) + '"';
+      return '<tr class="pfrow' + (c === code ? ' sel' : '') + '" data-code="' + c + '">' +
+        '<th>' + (PF.names[c] || c) + '</th><td>' + c + '</td>' +
+        '<td>' + pxS(mm.last_price) + (mm.asof ? '<br><span class="muted" style="font-size:11px">' + mm.asof + '</span>' : '') + '</td>' +
+        '<td' + col(n) + '><b>' + (n == null ? '-' : pctS(n, 0) + '%') + '</b></td>' +
+        '<td' + col(ch) + '>' + (ch == null ? '-' : (ch >= 0 ? '+' : '-') + Math.abs(ch * 100).toFixed(0) + 'pp') + '</td>' +
+        '<td>' + (pc == null ? '-' : Math.round(pc * 100) + '%') + '</td>' +
+        hs.map(h => '<td>' + flipCell(mm, h) + '</td>').join('') +
+        '<td>' + (mm.age == null ? '-' : mm.age + 'w') + '</td>' +
+        '<td' + col(mm.wtd) + '>' + (mm.wtd == null ? '-' : pctS(mm.wtd, 2) + '%') + '</td></tr>';
+    }).join('');
+    tblEl.innerHTML = '<table class="data-table pftable"><thead><tr><th>Name</th><th>Asset</th>' +
+      '<th>Last close</th><th>CTA %</th><th>' + (OG ? OG.flow_weeks : 4) + 'w Δ</th>' +
+      '<th>Percentile (' + (OG ? OG.pctile_years : 5) + 'y)</th>' +
+      hs.map(h => '<th>' + h + 'w flip price</th>').join('') +
+      '<th>Sign held</th><th>Realized this week</th></tr></thead><tbody>' + rowsH + '</tbody></table>';
+  }
+  tblEl.addEventListener('click', function (e) {
+    const tr = e.target.closest('tr.pfrow');
+    if (tr && window.__setInstrument) window.__setInstrument(tr.dataset.code);
+  });
+
+  sel.addEventListener('change', function () {
+    code = sel.value; redraw();
+    if (window.__overviewRedraw) window.__overviewRedraw();
+  });
+  rng.querySelectorAll('.ubtn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      rng.querySelectorAll('.ubtn').forEach(function (x) { x.classList.toggle('on', x === b); });
+      months = parseInt(b.dataset.opt, 10); redraw();
+    });
+  });
+  window.__priceflipRedraw = redraw;
+  requestAnimationFrame(function () {
+    redraw();
+    if (window.__overviewRedraw) window.__overviewRedraw();
+  });
+})();
+
+// ---- trade pressure ----
+// Buy probability and expected trade: the independent-mode response curve weighted by each market's historical distribution (KDE).
+// The computation is done in Python (ctarep/pressure.py); here only color and units are applied.
+const PG = {{ pressure_grid_json | safe }};
+
+(function initPressure() {
+  if (!PG) return;
+  const el  = document.getElementById('chart-pressure');
+  const tbl = document.getElementById('table-pressure');
+  const sum = document.getElementById('ptSum');
+  const bar = document.getElementById('ptHidden');
+  if (!el) return;
+
+  let unit = 'usd';
+  const hiddenSet = new Set();
+  const scale = () => unit === 'usd' ? aumNow : 100;
+  const TL = PG.tier_labels;
+  const DOT = String.fromCharCode(0xB7);
+  const MINUS = String.fromCharCode(0x2212);
+  const SIGMA = String.fromCharCode(0x3C3);
+
+  function fmt(v) {
+    const sign = v < 0 ? '-' : '+';
+    return unit === 'usd'
+      ? sign + '$' + Math.abs(v).toLocaleString('en-US', {maximumFractionDigits: 1}) + 'B'
+      : sign + Math.abs(v).toFixed(1) + 'pp';
+  }
+  function pctTxt(x) { return x >= 0.995 ? '99%+' : Math.round(x * 100) + '%'; }
+  function sgn(v, d) { return (v >= 0 ? '+' : '-') + Math.abs(v).toFixed(d); }
+
+  function rows() {
+    const k = scale();
+    return PG.assets.map(function (code, i) {
+      if (PG.e_trade[i] == null) return null;
+      const p = PG.p_buy[i];
+      return {code: code, name: PG.names[code] || code, p: p, pn: PG.p_buy_norm[i],
+              tier: PG.tier[i], method: PG.method[i],
+              e: PG.e_trade[i] * k, sd: PG.sd[i] * k, flat: PG.flat[i] * k,
+              fz: PG.flip_z[i], fp: PG.flip_pct[i], fa: PG.flip_above[i]};
+    }).filter(Boolean);
+  }
+  // Label: direction and the probability of that direction. Neutral uses the buy probability as is.
+  function tag(r) {
+    if (r.tier === 'mixed') return 'Neutral ' + DOT + ' buy ' + pctTxt(r.p);
+    return (r.p >= 0.5 ? 'Buy ' + pctTxt(r.p) : 'Sell ' + pctTxt(1 - r.p));
+  }
+  function flipTxt(r) {
+    if (r.fz == null) return 'Direction does not change within the distribution range';
+    const up = r.fa === 'buy' ? 'buy' : 'sell', dn = r.fa === 'buy' ? 'sell' : 'buy';
+    return 'Above own price ' + sgn(r.fz, 1) + SIGMA + ' (' + sgn(r.fp * 100, 1) + '%): ' + up +
+           ', below: ' + dn;
+  }
+
+  function redraw() {
+    const th = currentTheme();
+    const C = PG.bar_colors[th] || PG.bar_colors.light;
+    const dark = th === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+    const strong = dark ? '#ffffff' : '#0b0b0b';
+    const colorOf = t => t === 'buy_sure' ? C.pos : t === 'buy_lean' ? C.posFade
+      : t === 'sell_sure' ? C.neg : t === 'sell_lean' ? C.negFade : C.mid;
+
+    // Universe order as is (matches the axis of the other charts)
+    const R = rows().filter(function (r) { return !hiddenSet.has(r.code) && inSector(r.code); });
+    const labelToCode = {};
+    const y = R.map(function (r) {
+      const lab = r.code + ' ' + DOT + ' ' + r.name + '   [' + tag(r) + ']';
+      labelToCode[lab] = r.code;
+      return lab;
+    });
+
+    const traces = [{
+      type: 'bar', orientation: 'h', name: 'Expected trade', y: y, x: R.map(r => r.e),
+      marker: {color: R.map(r => colorOf(r.tier)), line: {width: 2, color: surf}},
+      customdata: R.map(r =>
+        'Expected trade ' + fmt(r.e) + ' (1' + SIGMA + ' width ' + fmt(r.sd).replace(/^[+-]/, '') + ')<br>' +
+        TL[r.tier] + ': buy probability ' + pctTxt(r.p) +
+        (r.method === 'kde' ? ' (normal assumption ' + pctTxt(r.pn) + ')' : ' (too few observations, normal assumption)') +
+        '<br>' + flipTxt(r)),
+      hovertemplate: '%{y}<br>%{customdata}<extra></extra>',
+      text: R.map(r => fmt(r.e)), textposition: 'outside', cliponaxis: false,
+      textfont: {size: 10, color: ink},
+    }, {
+      type: 'scatter', mode: 'markers', name: 'If flat',
+      y: y, x: R.map(r => r.flat),
+      marker: {symbol: 'line-ns', size: 16, line: {color: strong, width: 2}},
+      customdata: R.map(r => fmt(r.flat)),
+      hovertemplate: '%{y}<br>Flat %{customdata}<extra></extra>',
+    }];
+
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink}, margin: {l: 300, r: 40, t: 16, b: 48},
+      height: 30 * R.length + 110, bargap: 0.34,
+      hovermode: 'closest', dragmode: false,
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'left', x: 0,
+               bgcolor: 'rgba(0,0,0,0)', font: {color: ink, size: 11}},
+      xaxis: {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: true,
+              zerolinecolor: bl, zerolinewidth: 1, showline: false,
+              tickformat: '+,.0f', ticksuffix: unit === 'usd' ? '' : 'pp',
+              title: {text: (unit === 'usd' ? 'Expected trade, $BN' : 'Expected trade, pp') +
+                            '  (+ buy / ' + MINUS + ' sell)',
+                      font: {color: muted, size: 11}},
+              tickfont: {color: muted, size: 11}},
+      yaxis: {showgrid: false, zeroline: false, type: 'category',
+              autorange: 'reversed', automargin: false,
+              tickmode: 'array', tickvals: y, ticktext: y,
+              tickfont: {color: muted, size: 11}},
+    };
+    el.style.height = layout.height + 'px';
+    Plotly.react(el, traces, layout,
+                 {responsive: true, displayModeBar: false, locale: 'en'})
+      .then(function () {
+        try { Plotly.Plots.resize(el); } catch (e) {}
+        bindYTickHide(el, labelToCode, function (code) {
+          hiddenSet.add(code); redraw();
+        });
+      });
+
+    renderHideChips(bar, hiddenSet, c => PG.names[c] || c,
+      function (code) { hiddenSet.delete(code); redraw(); },
+      function () { hiddenSet.clear(); redraw(); });
+
+    const isBuy = r => r.tier === 'buy_lean' || r.tier === 'buy_sure';
+    const isSell = r => r.tier === 'sell_lean' || r.tier === 'sell_sure';
+    sum.textContent = 'Buy pressure ' + R.filter(isBuy).length + ' ' + DOT +
+      ' Sell pressure ' + R.filter(isSell).length + ' ' + DOT +
+      ' Neutral ' + R.filter(r => r.tier === 'mixed').length + ' ' + DOT +
+      ' Expected net trade ' + fmt(R.reduce((a, r) => a + r.e, 0));
+
+    const sub = t => '<br><span class="muted" style="font-size:11px">' + t + '</span>';
+    tbl.innerHTML =
+      '<table class="data-table"><thead><tr><th>Market</th><th>Pressure</th>' +
+      '<th>Buy probability</th><th>Expected trade</th><th>If flat</th><th>Direction flip</th>' +
+      '</tr></thead><tbody>' +
+      R.map(function (r) {
+        return '<tr><th>' + r.code + ' ' + DOT + ' ' + r.name + '</th>' +
+          '<td><b>' + TL[r.tier] + '</b></td>' +
+          '<td>' + pctTxt(r.p) + sub('Normal assumption ' + pctTxt(r.pn)) + '</td>' +
+          '<td>' + fmt(r.e) + sub('1' + SIGMA + ' width ' + fmt(r.sd).replace(/^[+-]/, '')) + '</td>' +
+          '<td>' + fmt(r.flat) + '</td>' +
+          '<td>' + flipTxt(r) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  document.getElementById('ptUnit').querySelectorAll('.ubtn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.getElementById('ptUnit').querySelectorAll('.ubtn')
+        .forEach(function (x) { x.classList.toggle('on', x === b); });
+      unit = b.dataset.opt; redraw();
+    });
+  });
+
+  window.__pressureRedraw = redraw;
+  requestAnimationFrame(redraw);
+})();
+
+// ---- expandable asset class exposure ----
+// By default, the totals of the four asset classes. Only asset classes whose chip is clicked expand into member assets.
+// Colors are entity-fixed per the dataviz rules: an expanded asset keeps its asset class hue,
+// so "which asset class an asset belongs to" stays readable from color.
+const EG = {{ exposure_grid_json | safe }};
+
+(function initExposure() {
+  if (!EG) return;
+  const panel = document.getElementById('expPanel');
+  const el = document.getElementById('chart-expo');
+  const tbl = document.getElementById('table-expo');
+  if (!panel || !el) return;
+
+  // Display state: by default only the four asset classes are on and detailed assets are off/collapsed
+  let expView = 'line';                   // 'line' | 'heat'
+  let detail = false;                     // detail (individual asset) view
+  const secOn = new Set(EG.sectors);      // asset classes put on the chart
+  // Items switched off via the legend. Plotly.react resets a new trace to the default
+  // (visible: true) when it has no visible, so legend clicks are captured here and
+  // restored on redraw.
+  // (Without this, lines switched off come back whenever the period, theme or tab changes.)
+  const legendOff = new Set();
+
+  // Global asset class: when selected, only market lines of that asset class are shown (drills down from asset class totals to markets)
+  const secList = () => EG.sectors.filter(s => SECTOR === 'ALL' || s === SECTOR);
+  const isDetail = () => detail || SECTOR !== 'ALL';
+
+  // ---- detail asset colors ----
+  // The palette is split into two tiers: slots 0-3 = asset class total lines, slots 4-7 = individual assets.
+  // No slots overlap, so a total line and an asset line never share a color.
+  // (Previously the Equities total and ES were the same blue and could not be told apart.)
+  // Asset classes are distinguished by line style: solid/dash/dot/longdash. Color + line style = all 16 unique.
+  const DASHES = ['solid', 'dash', 'dot', 'longdash', 'dashdot', 'longdashdot'];
+  function mktColor(code) {
+    const pal = EG.slot_colors[currentTheme()] || EG.slot_colors.light;
+    return pal[EG.market_slot[code] % pal.length];
+  }
+  const mktDash = code => DASHES[(EG.market_dash[code] || 0) % DASHES.length];
+
+  // Only asset class buttons in one horizontal row. Individual asset on/off is handled by the chart legend
+  // (removing 16 buttons halves the space). The count of visible assets is shown on the button
+  // so what was switched off in the legend is also visible in the panel.
+  function buildPanel() {
+    const sc = EG.sector_colors[currentTheme()] || EG.sector_colors.light;
+    panel.innerHTML = '';
+    const top = document.createElement('div');
+    top.className = 'secrow';
+    secList().forEach(function (s) {
+      const mem = EG.members[s] || [];
+      const shownN = isDetail() ? mem.filter(c => !legendOff.has(c)).length
+                                : (legendOff.has(s) ? 0 : 1);
+      const totN = isDetail() ? mem.length : 1;
+      const sb = document.createElement('button');
+      sb.type = 'button';
+      sb.className = 'secbtn' + (secOn.has(s) ? ' shown' : '');
+      sb.innerHTML = '<span class="dot" style="background:' +
+        (secOn.has(s) ? sc[s] : 'transparent') + '"></span>' + s +
+        (secOn.has(s) ? '<span class="cnt">' + shownN + '/' + totN + '</span>' : '');
+      sb.title = 'Click to show or hide this asset class on the chart';
+      sb.addEventListener('click', function () {
+        if (secOn.has(s)) secOn.delete(s); else secOn.add(s);
+        buildPanel(); redraw();
+      });
+      top.appendChild(sb);
+    });
+    panel.appendChild(top);
+  }
+
+  // Asset class total lines or individual asset lines. Items switched off via the legend are restored as 'legendonly'.
+  function build() {
+    const sc = EG.sector_colors[currentTheme()] || EG.sector_colors.light;
+    const traces = [];
+    secList().forEach(function (s) {
+      if (!secOn.has(s)) return;
+      if (!isDetail()) {
+        traces.push({
+          type: 'scatter', mode: 'lines', name: s,
+          x: EG.dates, y: EG.sector_series[s],
+          line: {color: sc[s], width: 2},
+          visible: legendOff.has(s) ? 'legendonly' : true,
+          hovertemplate: '%{y:+.1%}<extra>' + s + '</extra>',
+        });
+        return;
+      }
+      (EG.members[s] || []).forEach(function (c) {
+        traces.push({
+          type: 'scatter', mode: 'lines',
+          name: c + ' \u00b7 ' + (EG.names[c] || c),
+          x: EG.dates, y: EG.market_series[c],
+          line: {color: mktColor(c), width: 2.25, dash: mktDash(c)},
+          visible: legendOff.has(c) ? 'legendonly' : true,
+          hovertemplate: '%{y:+.1%}<extra>' + c + '</extra>',
+        });
+      });
+    });
+    return traces;
+  }
+
+
+  // Month-end resample: putting 1,480 weekly points straight into the heatmap smears the cells.
+  function monthlyIdx() {
+    const out = [];
+    for (let i = 0; i < EG.dates.length; i++) {
+      const m = EG.dates[i].slice(0, 7);
+      if (i === EG.dates.length - 1 || EG.dates[i + 1].slice(0, 7) !== m) out.push(i);
+    }
+    return out;
+  }
+
+  function buildHeat() {
+    const idx = monthlyIdx();
+    const codes = secList().reduce((a, s) => a.concat(EG.members[s] || []), []);
+    const z = codes.map(c => idx.map(i => {
+      const v = (EG.market_series[c] || [])[i];
+      return v == null ? null : v * 100;
+    }));
+    let lim = 0;
+    z.forEach(r => r.forEach(v => { if (v != null) lim = Math.max(lim, Math.abs(v)); }));
+    lim = Math.max(lim * 0.85, 1);      // keep the upper tail from taking over the scale
+    const C = SG ? (SG.bar_colors[currentTheme()] || SG.bar_colors.light) : null;
+    return [{
+      type: 'heatmap',
+      x: idx.map(i => EG.dates[i]),
+      y: codes.map(c => c + ' \u00b7 ' + (EG.names[c] || c)),
+      z: z, zmid: 0, zmin: -lim, zmax: lim,
+      colorscale: C ? C.scale : 'RdBu',
+      hovertemplate: '%{y}<br>%{x|%Y-%m}<br>%{z:+.0f}%<extra></extra>',
+      colorbar: {title: {text: '% notional', font: {size: 11}},
+                 thickness: 10, len: 0.85, outlinewidth: 0},
+    }];
+  }
+
+  function redraw() {
+    const dark = currentTheme() === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+
+    // The heatmap shows all markets on one screen, so asset class/asset buttons are meaningless there
+    const isHeat = expView === 'heat';
+    panel.hidden = isHeat;
+    document.getElementById('expActions').hidden = isHeat;
+    if (isHeat) {
+      const codes = secList().reduce((a, s) => a.concat(EG.members[s] || []), []);
+      const hl = {
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        font: {size: 12, color: ink}, margin: {l: 190, r: 16, t: 16, b: 44},
+        height: Math.max(520, 30 * codes.length + 90),
+        hovermode: 'closest', dragmode: 'zoom',
+        hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+        xaxis: {type: 'date', showgrid: false, zeroline: false, linecolor: bl,
+                linewidth: 1, tickcolor: bl, tickfont: {color: muted, size: 11}},
+        yaxis: {type: 'category', autorange: 'reversed', showgrid: false,
+                zeroline: false, automargin: false,
+                tickfont: {color: muted, size: 11}},
+      };
+      const dr0 = RANGES['expo'];
+      if (dr0) { hl.xaxis.range = dr0; hl.xaxis.autorange = false; }
+      el.style.height = hl.height + 'px';
+      Plotly.react(el, buildHeat(), hl,
+                   {responsive: true, displayModeBar: false, locale: 'en'})
+        .then(() => { try { Plotly.Plots.resize(el); } catch (e) {} bindLegend(); });
+      tbl.innerHTML = '<p class="muted">The heatmap uses month-end values. '
+        + 'Exact figures are in the table of the line view.</p>';
+      return;
+    }
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink}, margin: {l: 56, r: 96, t: 16, b: 44},
+      height: 420, hovermode: 'x unified', dragmode: 'zoom',
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'left', x: 0,
+               bgcolor: 'rgba(0,0,0,0)', font: {color: ink, size: 11}},
+      xaxis: {showgrid: false, zeroline: false, linecolor: bl, linewidth: 1,
+              tickcolor: bl, tickfont: {color: muted, size: 11}, type: 'date'},
+      yaxis: {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: true,
+              zerolinecolor: bl, zerolinewidth: 1, showline: false,
+              tickformat: '+.0%', tickfont: {color: muted, size: 11}},
+    };
+    const dr = RANGES['expo'];
+    if (dr) { layout.xaxis.range = dr; layout.xaxis.autorange = false; }
+    el.style.height = layout.height + 'px';   // container is authoritative (prevents vertical shrink)
+    Plotly.react(el, build(), layout,
+                 {responsive: true, displayModeBar: false, locale: 'en'})
+        .then(() => { try { Plotly.Plots.resize(el); } catch (e) {} bindLegend(); });
+
+    // Table: only the lines switched on in the chart, last 12 weeks
+    const rows = [];
+    secList().forEach(s => {
+      if (!secOn.has(s)) return;
+      if (!isDetail()) {
+        if (!legendOff.has(s)) rows.push([s, EG.sector_series[s]]);
+        return;
+      }
+      (EG.members[s] || []).forEach(c => {
+        if (!legendOff.has(c)) {
+          rows.push([c + ' · ' + (EG.names[c] || c), EG.market_series[c]]);
+        }
+      });
+    });
+    const n = EG.dates.length, k = Math.min(12, n);
+    const idx = Array.from({length: k}, (_, i) => n - k + i);
+    tbl.innerHTML = rows.length
+      ? '<table class="data-table"><thead><tr><th></th>' +
+        idx.map(i => '<th>' + EG.dates[i].slice(2) + '</th>').join('') +
+        '</tr></thead><tbody>' +
+        rows.map(([nm, ser]) => '<tr><th>' + nm + '</th>' +
+          idx.map(i => '<td>' + (ser[i] == null ? '-'
+            : (ser[i] >= 0 ? '+' : '') + (ser[i] * 100).toFixed(1) + '%') + '</td>').join('') +
+          '</tr>').join('') + '</tbody></table>'
+      : '<p class="muted">No lines to show.</p>';
+  }
+
+  (function () {
+    const bar = document.getElementById('expView');
+    bar.querySelectorAll('.ubtn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        bar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+        expView = b.dataset.opt; redraw();
+      });
+    });
+  })();
+  (function () {
+    const bar = document.getElementById('expDetail');
+    bar.querySelectorAll('.ubtn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        bar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+        detail = b.dataset.opt === 'on';
+        buildPanel(); redraw();
+      });
+    });
+  })();
+  document.getElementById('expReset').addEventListener('click', function () {
+    legendOff.clear();
+    EG.sectors.forEach(s => secOn.add(s));
+    buildPanel(); redraw();
+  });
+
+  // Capture legend clicks in our own state. Returning false blocks the Plotly default,
+  // and we redraw with visible applied -> it persists through any interaction.
+  //
+  // `el.on` exists only after Plotly has drawn that div once. Calling it on an empty div
+  // throws a TypeError and the whole script block stops there: that previously left all
+  // later charts undrawn and skipped the theme initialization.
+  // So attach it once, after the first render finishes (inside .then).
+  let legendBound = false;
+  function bindLegend() {
+    if (legendBound || typeof el.on !== 'function') return;
+    legendBound = true;
+    el.on('plotly_legendclick', function (ev) {
+      const nm = ((ev.data || [])[ev.curveNumber] || {}).name || '';
+      const key = nm.indexOf(' · ') >= 0 ? nm.split(' · ')[0] : nm;
+      if (!key) return false;
+      if (legendOff.has(key)) legendOff.delete(key); else legendOff.add(key);
+      buildPanel(); redraw();
+      return false;
+    });
+  }
+
+  window.__expoRedraw = () => { buildPanel(); redraw(); };
+  buildPanel();
+  requestAnimationFrame(redraw);
+})();
+
+// ---- Realized flow + decomposition ----
+// Since the position is w = M/σ, Δw splits exactly as (M₁−M₀)/σ₁ + M₀(1/σ₁−1/σ₀).
+// Python supplies only the two components (pp); $BN is computed here as x AUM.
+const FG = {{ flow_grid_json | safe }};
+
+(function initRFlow() {
+  if (!FG) return;
+  const el = document.getElementById('chart-rflow');
+  const tbl = document.getElementById('table-rflow');
+  const winBar = document.getElementById('rfWin');
+  if (!el || !winBar) return;
+
+  let win = FG.windows.indexOf('26') >= 0 ? '26' : FG.windows[0];
+  let unit = 'usd';       // 'usd' | 'pct' | 'pctile'
+  let view = 'total';     // 'total' | 'split'  (ignored in percentile mode)
+  let pmeth = 'rolling';  // 'rolling' | 'exp'
+  let pwin = (FG.pct_windows || []).indexOf('52') >= 0 ? '52' : (FG.pct_windows || [])[0];
+  const PW_LABEL = {'26': '6M (26w)', '52': '1Y (52w)', '104': '2Y (104w)',
+                    '156': '3Y (156w)', '260': '5Y (260w)'};
+  const pctSel = document.getElementById('rfPctWin');
+  (FG.pct_windows || []).forEach(function (w) {
+    const o = document.createElement('option');
+    o.value = w; o.textContent = PW_LABEL[w] || (w + 'w');
+    if (w === pwin) o.selected = true;
+    pctSel.appendChild(o);
+  });
+
+  const WIN_LABEL = {'1': '1w', '2': '2w', '4': '4w (1 month)',
+                     '13': '13w (1 quarter)', '26': '26w (6 months)', '52': '52w (1 year)'};
+  FG.windows.forEach(function (w) {
+    const o = document.createElement('option');
+    o.value = w;
+    o.textContent = WIN_LABEL[w] || (w + 'w');
+    if (w === win) o.selected = true;
+    winBar.appendChild(o);
+  });
+
+  const DOT = String.fromCharCode(0xB7);
+  // Amount labels are also shown in percentile mode, so the $ scale is always needed.
+  const scale = () => unit === 'pct' ? 1 : aumNow / 100;
+  function fmtAmt(v, forceUsd) {
+    if (v == null) return '-';
+    const sign = v < 0 ? '-' : '+';
+    return (forceUsd || unit !== 'pct')
+      ? sign + '$' + Math.abs(v).toLocaleString('en-US', {maximumFractionDigits: 1}) + 'B'
+      : sign + Math.abs(v).toFixed(1) + 'pp';
+  }
+  const fmt = function (v) { return fmtAmt(v, false); };
+  const pctileOf = function (code) {
+    const t = (FG.pctile || {})[win] || {};
+    const g = t[pmeth === 'exp' ? 'exp' : pwin] || {};
+    const v = g[code];
+    return v == null ? null : v;
+  };
+
+  function rows() {
+    const d = FG.decomp[win] || {}, k = scale();
+    return FG.markets.filter(inSector).map(function (c) {
+      const p = d[c] || [null, null];
+      const mom = p[0] == null ? null : p[0] * k;
+      const vol = p[1] == null ? null : p[1] * k;
+      const tot = (mom == null || vol == null) ? null : mom + vol;
+      return {code: c, name: FG.names[c] || c, mom: mom, vol: vol, tot: tot,
+              p: pctileOf(c)};
+    }).filter(r => r.tot != null)
+      .sort((a, b) => unit === 'pctile' ? (a.p - b.p) : (a.tot - b.tot));
+  }
+
+  function redraw() {
+    const th = currentTheme();
+    const C = SG ? (SG.bar_colors[th] || SG.bar_colors.light)
+                 : {pos: '#2a78d6', neg: '#e34948', mid: '#c3c2b7'};
+    const dark = th === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+    const strong = dark ? '#ffffff' : '#0b0b0b';
+
+    const isP = unit === 'pctile';
+    // Percentile is a monotonic nonlinear transform of the total, so component percentiles cannot be added
+    // (pct(a+b) != pct(a)+pct(b)). So in percentile mode the decomposition toggle is hidden,
+    // and the decomposed values stay in the hover as amounts (no information is lost).
+    document.getElementById('rfView').hidden = isP;
+    document.getElementById('rfMethod').hidden = !isP;
+    document.getElementById('rfPctWrap').hidden = !(isP && pmeth === 'rolling');
+
+    const R = rows();
+    const y = R.map(r => r.code + ' ' + DOT + ' ' + r.name);
+    let traces;
+    if (isP) {
+      // Bars grow left and right with 50 as neutral (base=50). The axis is 0-100.
+      traces = [{
+        type: 'bar', orientation: 'h', y: y,
+        x: R.map(r => r.p == null ? null : r.p - 50),
+        base: R.map(function () { return 50; }),
+        marker: {color: R.map(r => r.p == null ? C.mid : (r.p >= 50 ? C.pos : C.neg)),
+                 line: {width: 2, color: surf}},
+        text: R.map(r => (r.p == null ? '-' : 'Percentile ' + r.p.toFixed(0))
+                         + '  (' + fmtAmt(r.tot, true) + ')'),
+        textposition: 'outside', cliponaxis: false,
+        textfont: {size: 10, color: ink},
+        customdata: R.map(r => [fmtAmt(r.tot, true), fmtAmt(r.mom, true),
+                                fmtAmt(r.vol, true),
+                                r.p == null ? '-' : r.p.toFixed(0)]),
+        hovertemplate: '%{y}<br>Percentile %{customdata[3]}'
+          + '<br>Amount %{customdata[0]}'
+          + '<br>Trend %{customdata[1]} · Volatility %{customdata[2]}<extra></extra>',
+        showlegend: false,
+      }];
+    } else if (view === 'total') {
+      traces = [{
+        type: 'bar', orientation: 'h', y: y, x: R.map(r => r.tot),
+        marker: {color: R.map(r => r.tot > 0 ? C.pos : (r.tot < 0 ? C.neg : C.mid)),
+                 line: {width: 2, color: surf}},
+        text: R.map(r => fmt(r.tot)), textposition: 'outside', cliponaxis: false,
+        textfont: {size: 10, color: ink},
+        hovertemplate: '%{y}<br>%{text}<extra></extra>',
+        showlegend: false,
+      }];
+    } else {
+      // Even with mixed signs, barmode:'relative' stacks up/down so the bar end = total.
+      traces = [{
+        type: 'bar', orientation: 'h', name: 'Trend change',
+        y: y, x: R.map(r => r.mom),
+        marker: {color: C.pos, line: {width: 2, color: surf}},
+        customdata: R.map(r => fmt(r.mom)),
+        hovertemplate: '%{y}<br>Trend change %{customdata}<extra></extra>',
+      }, {
+        type: 'bar', orientation: 'h', name: 'Volatility change',
+        y: y, x: R.map(r => r.vol),
+        marker: {color: C.mid, line: {width: 2, color: surf},
+                 pattern: {shape: R.map(() => '/'), bgcolor: surf,
+                           size: 5, solidity: 0.35}},
+        customdata: R.map(r => fmt(r.vol)),
+        hovertemplate: '%{y}<br>Volatility change %{customdata}<extra></extra>',
+      }, {
+        type: 'scatter', mode: 'markers', name: 'Total',
+        y: y, x: R.map(r => r.tot),
+        marker: {symbol: 'line-ns', size: 16, line: {color: strong, width: 2}},
+        customdata: R.map(r => fmt(r.tot)),
+        hovertemplate: '%{y}<br>Sum %{customdata}<extra></extra>',
+      }];
+    }
+
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink}, margin: {l: 190, r: 96, t: 16, b: 46},
+      height: 30 * R.length + 100, barmode: 'relative', bargap: 0.32,
+      shapes: isP ? [{type: 'line', xref: 'x', yref: 'paper', x0: 50, x1: 50,
+                      y0: 0, y1: 1, line: {color: bl, width: 1}}] : [],
+      hovermode: 'closest', dragmode: false,
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'left', x: 0,
+               bgcolor: 'rgba(0,0,0,0)', font: {color: ink, size: 11}},
+      xaxis: isP
+        ? {range: [0, 112], showgrid: true, gridcolor: gl, gridwidth: 1,
+           zeroline: false, showline: false, ticksuffix: '%',
+           tickmode: 'array', tickvals: [0, 25, 50, 75, 100],
+           title: {text: 'Percentile vs historical distribution (' +
+                     (pmeth === 'exp' ? 'Expanding' : 'Rolling ' + pwin + 'w') +
+                     ') · 50 = normal level for that market',
+                   font: {color: muted, size: 11}},
+           tickfont: {color: muted, size: 11}}
+        : {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: true,
+           zerolinecolor: bl, zerolinewidth: 1, showline: false,
+           tickformat: '+,.0f', ticksuffix: unit === 'usd' ? '' : 'pp',
+           title: {text: 'Cumulative net trade, ' + (unit === 'usd' ? '$BN' : 'pp') +
+                         '  (+ buy / ' + String.fromCharCode(0x2212) + ' sell)',
+                   font: {color: muted, size: 11}},
+           tickfont: {color: muted, size: 11}},
+      yaxis: {showgrid: false, zeroline: false, type: 'category', automargin: false,
+              tickmode: 'array', tickvals: y, ticktext: y,
+              tickfont: {color: muted, size: 11}},
+    };
+    el.style.height = layout.height + 'px';
+    Plotly.react(el, traces, layout,
+                 {responsive: true, displayModeBar: false, locale: 'en'})
+      .then(() => { try { Plotly.Plots.resize(el); } catch (e) {} });
+
+    const sm = R.reduce((a, r) => a + Math.abs(r.mom), 0);
+    const sv = R.reduce((a, r) => a + Math.abs(r.vol), 0);
+    const ext = R.filter(r => r.p != null && (r.p >= 90 || r.p <= 10));
+    document.getElementById('rfSum').textContent =
+      'Last ' + win + 'w · net trade ' + fmtAmt(R.reduce((a, r) => a + r.tot, 0), true) +
+      ' · volatility contribution ' + (sm + sv ? Math.round(sv / (sm + sv) * 100) : 0) + '%' +
+      (isP ? ' · extremes (percentile 90 or above, or 10 or below) ' + ext.length +
+             (ext.length ? ': ' + ext.map(r => r.code).join(', ') : '') : '');
+
+    tbl.innerHTML =
+      '<table class="data-table"><thead><tr><th>Market</th><th>Trend change</th>' +
+      '<th>Volatility change</th><th>Sum</th><th>Volatility share</th>' +
+      '<th>Percentile</th></tr></thead><tbody>' +
+      R.slice().reverse().map(function (r) {
+        const den = Math.abs(r.mom) + Math.abs(r.vol);
+        return '<tr><th>' + r.code + ' ' + DOT + ' ' + r.name + '</th>' +
+          '<td>' + fmt(r.mom) + '</td><td>' + fmt(r.vol) + '</td>' +
+          '<td><b>' + fmt(r.tot) + '</b></td>' +
+          '<td>' + (den ? Math.round(Math.abs(r.vol) / den * 100) : 0) + '%</td>' +
+          '<td>' + (r.p == null ? '-' : r.p.toFixed(0)) + '</td></tr>';
+      }).join('') + '</tbody></table>' +
+      (isP ? '<p class="muted" style="font-size:11.5px">Percentile 50 means the <b>normal level for that market</b>, '
+             + 'which is not the same as no trade. In some markets the median trade is not 0 because of '
+             + 'window roll-off. A long window makes samples overlap and lowers resolution.</p>' : '');
+  }
+
+  winBar.addEventListener('change', function () { win = winBar.value; redraw(); });
+  pctSel.addEventListener('change', function () { pwin = pctSel.value; redraw(); });
+  [['rfUnit', v => unit = v], ['rfView', v => view = v],
+   ['rfMethod', v => pmeth = v]].forEach(function (spec) {
+    const bar = document.getElementById(spec[0]);
+    bar.addEventListener('click', function (e) {
+      const b = e.target.closest('.ubtn');
+      if (!b) return;
+      bar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+      spec[1](b.dataset.opt); redraw();
+    });
+  });
+
+  window.__rflowRedraw = redraw;
+  requestAnimationFrame(redraw);
+})();
+
+// ---- position age x distance to flip ----
+// An asset held for a long time with a flip imminent is the top watch candidate for reversal risk.
+const AG = {{ age_grid_json | safe }};
+
+(function initAgeWatch() {
+  if (!AG) return;
+  const el = document.getElementById('chart-agewatch');
+  const hzBar = document.getElementById('agHz');
+  if (!el || !hzBar) return;
+
+  let hz = AG.horizons.indexOf('4') >= 0 ? '4' : AG.horizons[0];
+  let yMode = 'sigma';
+
+  // If there is only one horizon (config sweep result fixed at 4w), hide the selector
+  if (AG.horizons.length <= 1) {
+    const lb = hzBar.previousElementSibling;
+    if (lb && lb.tagName === 'LABEL') lb.hidden = true;
+    hzBar.hidden = true;
+  } else {
+    AG.horizons.forEach(function (h) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ubtn' + (h === hz ? ' on' : '');
+      b.dataset.opt = h;
+      b.textContent = h + 'w';
+      hzBar.appendChild(b);
+    });
+  }
+
+  const DOT = String.fromCharCode(0xB7);
+  function rows() {
+    const t = AG.trig[hz] || {};
+    return AG.markets.filter(inSector).map(function (c) {
+      const v = t[c] || [null, null, null, null];
+      const yv = yMode === 'sigma' ? v[0] : v[1];
+      return {code: c, name: AG.names[c] || c, age: AG.age[c],
+              pos: AG.pos[c], sigma: v[0], pct: v[1],
+              flip: v[2], last: v[3],
+              asof: (AG.asof || {})[c] || null,
+              y: yv == null ? null : Math.abs(yv)};
+    }).filter(r => r.age != null && r.y != null);
+  }
+
+  function redraw() {
+    const th = currentTheme();
+    const C = SG ? (SG.bar_colors[th] || SG.bar_colors.light)
+                 : {pos: '#2a78d6', neg: '#e34948', mid: '#c3c2b7'};
+    const dark = th === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+
+    const R = rows();
+    const maxPos = Math.max.apply(null, R.map(r => Math.abs(r.pos))) || 1;
+    const wAge = AG.watch[0];
+    // The sigma threshold is 1.5σ regardless of horizon. In % mode no threshold line is drawn
+    // (the basis differs per market, so it cannot be one horizontal line).
+    const wY = AG.watch[1];
+
+    const longs = R.filter(r => r.pos > 0), shorts = R.filter(r => r.pos <= 0);
+    const mk = (arr, color, name) => ({
+      type: 'scatter', mode: 'markers+text', name: name,
+      x: arr.map(r => r.age), y: arr.map(r => r.y),
+      text: arr.map(r => r.code), textposition: 'top center',
+      textfont: {size: 10, color: ink},
+      marker: {color: color, opacity: 0.85, line: {width: 1.5, color: surf},
+               size: arr.map(r => 7 + 12 * Math.sqrt(Math.abs(r.pos) / maxPos))},
+      // Price is the raw contract (C1): adjusted continuous futures prices are not actual quotes, so do not display them
+      customdata: arr.map(r => [r.name, r.pos, r.sigma, r.pct,
+                                r.last == null ? '-' : r.last.toLocaleString('en-US'),
+                                r.flip == null ? '-' : r.flip.toLocaleString('en-US'),
+                                r.asof || '?']),
+      hovertemplate: '<b>%{customdata[0]}</b><br>Held %{x}w · position %{customdata[1]:+.1f}%'
+        + '<br>To flip %{customdata[2]:+.2f}σ (= %{customdata[3]:+.2f}%)'
+        + '<br>Price %{customdata[4]} → flip price %{customdata[5]}'
+        + '<br><i>Price as of %{customdata[6]} (C1 raw contract)</i>'
+        + '<extra></extra>',
+    });
+
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink}, margin: {l: 72, r: 24, t: 16, b: 52},
+      height: 460, hovermode: 'closest', dragmode: 'zoom',
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'left', x: 0,
+               bgcolor: 'rgba(0,0,0,0)', font: {color: ink, size: 11}},
+      xaxis: {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: false,
+              linecolor: bl, linewidth: 1, tickcolor: bl, rangemode: 'tozero',
+              title: {text: 'Position holding period (weeks)', font: {color: muted, size: 11}},
+              tickfont: {color: muted, size: 11}},
+      yaxis: {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: false,
+              showline: false, rangemode: 'tozero',
+              title: {text: yMode === 'sigma'
+                        ? 'To flip |' + hz + 'w σ|'
+                        : 'To flip |required move %|',
+                      font: {color: muted, size: 11}},
+              ticksuffix: yMode === 'sigma' ? '' : '%',
+              tickfont: {color: muted, size: 11}},
+      shapes: [], annotations: [],
+    };
+    if (yMode === 'sigma') {
+      layout.shapes = [
+        {type: 'line', xref: 'x', yref: 'y', x0: wAge, x1: wAge,
+         y0: 0, y1: 1, yref: 'paper', line: {color: bl, width: 1, dash: 'dot'}},
+        {type: 'line', xref: 'paper', yref: 'y', x0: 0, x1: 1,
+         y0: wY, y1: wY, line: {color: bl, width: 1, dash: 'dot'}},
+      ];
+      layout.annotations = [{
+        xref: 'paper', yref: 'paper', x: 1, y: 0, xanchor: 'right', yanchor: 'bottom',
+        text: '★ Long holding period and flip imminent = watch list', showarrow: false,
+        font: {color: muted, size: 10},
+      }];
+    }
+    el.style.height = layout.height + 'px';
+    Plotly.react(el, [mk(longs, C.pos, 'Long'), mk(shorts, C.neg, 'Short')], layout,
+                 {responsive: true, displayModeBar: false, locale: 'en'})
+      .then(() => { try { Plotly.Plots.resize(el); } catch (e) {} });
+
+    const watch = R.filter(r => r.age >= wAge && r.sigma != null
+                                && Math.abs(r.sigma) <= wY);
+    document.getElementById('agSum').textContent =
+      'Watch list ' + watch.length +
+      (watch.length ? ': ' + watch.map(r => r.code + '(' + r.age + 'w)').join(', ') : '');
+
+    // The table view was removed: it duplicated 7 columns of the flip trigger table (a 'duration' column was added there).
+
+    // As-of dates below the chart: if dates differ, group them
+    const g = {};
+    R.forEach(r => { if (r.asof) (g[r.asof] = g[r.asof] || []).push(r.code); });
+    const keys = Object.keys(g).sort().reverse();
+    let noteEl = document.getElementById('agAsof');
+    if (!noteEl) {
+      noteEl = document.createElement('p');
+      noteEl.id = 'agAsof';
+      noteEl.className = 'muted';
+      noteEl.style.fontSize = '11.5px';
+      el.parentNode.insertBefore(noteEl, el.nextSibling);
+    }
+    noteEl.innerHTML = 'Price as of: ' + keys.map(function (d) {
+      const m = g[d];
+      return '<b>' + d + '</b> (' + m.length
+             + (m.length <= 4 ? ': ' + m.join(', ') : '') + ')';
+    }).join(' · ') + ' · prices are the <b>C1 raw contract</b>';
+  }
+
+  [['agHz', v => hz = v], ['agY', v => yMode = v]].forEach(function (spec) {
+    const bar = document.getElementById(spec[0]);
+    bar.addEventListener('click', function (e) {
+      const b = e.target.closest('.ubtn');
+      if (!b) return;
+      bar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+      spec[1](b.dataset.opt); redraw();
+    });
+  });
+
+  window.__ageRedraw = redraw;
+  requestAnimationFrame(redraw);
+})();
+
+// ---- cumulative flow (single asset) ----
+// Cumulative flow = cumulative weekly position change = the position path with the start set to 0.
+// History reuses EG.market_series (% notional per market), and the fan on the right is
+// built by adding the SG per-scenario required trades to the current cumulative value.
+(function initCumFlow() {
+  if (!SG || !EG) return;
+  const el  = document.getElementById('chart-cumflow');
+  const tbl = document.getElementById('table-cumflow');
+  const aSel = document.getElementById('cfAsset');
+  const dSel = document.getElementById('cfDriver');
+  const wSel = document.getElementById('cfWin');
+  if (!el || !aSel || !dSel) return;
+
+  const WINDOWS = [['6M', 26], ['1Y', 52], ['2Y', 104], ['3Y', 156], ['5Y', 260]];
+  let asset  = SG.assets.indexOf('ES') >= 0 ? 'ES' : SG.assets[0];
+  let driver = SG.indep_key || SG.default_driver;
+  // Display mode, pick one of three: value ($BN) / value (pp) / percentile.
+  // Percentile is a monotonic transform of the unit, so $ and pp give the same result; the three share one row.
+  let view   = 'usd';         // 'usd' | 'pct' | 'pctile'
+  let method = 'rolling';     // 'rolling' | 'expanding'
+  let win    = 52;            // percentile window (weeks)
+
+  // The asset dropdown lists only markets in the global asset class. If the selected asset drops out, move to the first market.
+  let assetSig = '';
+  function syncAssets() {
+    const list = SG.assets.filter(inSector);
+    const sig = list.join(',');
+    if (sig === assetSig) return;
+    assetSig = sig;
+    if (list.indexOf(asset) < 0) asset = list[0] || asset;
+    aSel.innerHTML = '';
+    list.forEach(function (c) {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c + ' · ' + (SG.names[c] || c);
+      if (c === asset) o.selected = true;
+      aSel.appendChild(o);
+    });
+  }
+  syncAssets();
+  if (SG.indep_key) {
+    const o = document.createElement('option');
+    o.value = SG.indep_key; o.textContent = SG.indep_label; o.selected = true;
+    dSel.appendChild(o);
+  }
+  SG.drivers.forEach(function (d) {
+    const o = document.createElement('option');
+    o.value = d.code; o.textContent = d.label;
+    if (!SG.indep_key && d.code === driver) o.selected = true;
+    dSel.appendChild(o);
+  });
+  WINDOWS.forEach(function (w) {
+    const o = document.createElement('option');
+    o.value = w[1]; o.textContent = w[0] + ' (' + w[1] + 'w)';
+    if (w[1] === win) o.selected = true;
+    wSel.appendChild(o);
+  });
+
+  // Cumulative flow pp: set each market's first valid value to 0
+  function cumPct(code) {
+    const raw = EG.market_series[code] || [];
+    let base = null;
+    return raw.map(function (v) {
+      if (v == null) return null;
+      if (base === null) base = v;
+      return (v - base) * 100;
+    });
+  }
+  // Percentile: rank of the value within the window up to that point (0-100)
+  function rankIn(arr, v) {
+    let n = 0, le = 0;
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i] == null) continue;
+      n++; if (arr[i] <= v) le++;
+    }
+    return n ? le / n * 100 : null;
+  }
+  function toPctile(series) {
+    return series.map(function (v, i) {
+      if (v == null) return null;
+      const from = method === 'rolling' ? Math.max(0, i - win + 1) : 0;
+      return rankIn(series.slice(from, i + 1), v);
+    });
+  }
+
+  const DOT = String.fromCharCode(0xB7);
+  function fmtVal(v) {
+    if (v == null) return '-';
+    const sign = v < 0 ? '-' : '+';
+    if (view === 'pctile') return 'Percentile ' + v.toFixed(0);
+    return view === 'usd'
+      ? sign + '$' + Math.abs(v).toLocaleString('en-US', {maximumFractionDigits: 1}) + 'B'
+      : sign + Math.abs(v).toFixed(1) + 'pp';
+  }
+  const DAY = 86400000;
+  function isoToMs(iso) {
+    const p = iso.split('-').map(Number);
+    return Date.UTC(p[0], p[1] - 1, p[2]);
+  }
+  const msToIso = ms => new Date(ms).toISOString().slice(0, 10);
+  // The fan is a single 'next week' in the model, but on a 28-year axis 7 days is a single point and invisible.
+  // So it gets a width of 6% of the visible period and leaves padding behind it.
+  // The horizontal gap is for readability and is not a time scale: this is stated in the label.
+  const FAN_FRAC = 0.06;
+
+  function redraw() {
+    syncAssets();
+    const th = currentTheme();
+    const C = SG.bar_colors[th] || SG.bar_colors.light;
+    const dark = th === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+    const strong = dark ? '#ffffff' : '#0b0b0b';
+
+    const mode = (view === 'pctile') ? 'pctile' : 'level';
+    const unit = (view === 'pct') ? 'pct' : 'usd';
+    document.getElementById('cfMethod').hidden = (mode !== 'pctile');
+    document.getElementById('cfWinWrap').hidden =
+      (mode !== 'pctile' || method !== 'rolling');
+
+    const idx = SG.assets.indexOf(asset);
+    const k = (mode === 'pctile' || unit === 'pct') ? 1 : aumNow / 100;
+    // Cumulative pp -> display unit. Percentile mode is a monotonic transform, so the unit does not change the result.
+    const cum = cumPct(asset).map(v => v == null ? null : v * k);
+    const shown = mode === 'pctile' ? toPctile(cum) : cum;
+
+    // Last valid point
+    let last = -1;
+    for (let i = cum.length - 1; i >= 0; i--) { if (cum[i] != null) { last = i; break; } }
+
+    // Fan width and x axis range: the same proportion of padding always appears to the right of current
+    const drx = RANGES['cumflow'];
+    const lastMs = last >= 0 ? isoToMs(EG.dates[last]) : 0;
+    const viewFrom = drx ? drx[0] : EG.dates[0];
+    const viewToMs = drx ? isoToMs(drx[1]) : lastMs;
+    const fanMs = Math.max(7 * DAY, (viewToMs - isoToMs(viewFrom)) * FAN_FRAC);
+    const fanX = last >= 0 ? msToIso(lastMs + fanMs) : null;
+    const xRange = last < 0 ? null
+      : [viewFrom, (viewToMs >= lastMs) ? msToIso(lastMs + fanMs * 1.5) : drx[1]];
+
+    const traces = [];
+    traces.push({
+      type: 'scatter', mode: 'lines', name: asset + ' cumulative net trade',
+      x: EG.dates, y: shown,
+      line: {color: C.pos, width: 2},
+      hovertemplate: '%{x|%Y-%m-%d}<br>%{customdata}<extra></extra>',
+      customdata: shown.map(fmtVal),
+    });
+
+    // ---- fan: next-week endpoint per scenario ----
+    // Linearly interpolate between the 5 steps to fill a continuous band. Upper (blue) = net buy, lower (red) = net sell.
+    let fanInfo = [];
+    if (last >= 0) {
+      const D = SG.data[driver];
+      const keys = SG.scenarios.map(s => s.key);
+      const trades = keys.map(key => (D.asset.trades[key] || [])[idx]);
+      const shocks = keys.map(key => (D.shocks ? (D.shocks[key] || [])[idx] : null));
+      if (trades.every(v => v != null)) {
+        const base = cum[last];
+        const ends = trades.map(t => base + t * 100 * k);   // cumulative endpoint (display unit)
+        const x1 = fanX;
+        // In percentile mode, convert endpoints using the past distribution of the same window
+        const hist = mode === 'pctile'
+          ? cum.slice(method === 'rolling' ? Math.max(0, last - win + 1) : 0, last + 1)
+          : null;
+        const conv = v => mode === 'pctile' ? rankIn(hist, v) : v;
+        const flatI = keys.indexOf('flat');
+        const mid = conv(ends[flatI]);
+        // Interpolation: split each adjacent scenario interval into 5 for smoothness
+        const arc = [];
+        for (let i = 0; i < ends.length - 1; i++) {
+          for (let j = 0; j < 5; j++) {
+            const w = j / 5;
+            arc.push(conv(ends[i] * (1 - w) + ends[i + 1] * w));
+          }
+        }
+        arc.push(conv(ends[ends.length - 1]));
+        const lo = Math.min.apply(null, arc), hi = Math.max.apply(null, arc);
+        const cur = conv(base);
+        // Upper (buy) wedge / lower (sell) wedge: split in two to keep the diverging colors
+        [[mid, hi, C.pos, 'Net buy side'], [lo, mid, C.neg, 'Net sell side']].forEach(function (w) {
+          if (w[1] == null || w[0] == null || Math.abs(w[1] - w[0]) < 1e-12) return;
+          traces.push({
+            type: 'scatter', mode: 'lines', name: w[3], showlegend: false,
+            x: [EG.dates[last], x1, x1, EG.dates[last]],
+            y: [cur, w[0], w[1], cur],
+            fill: 'toself', fillcolor: w[2], opacity: 0.22,
+            line: {width: 0}, hoverinfo: 'skip',
+          });
+        });
+        // Markers at the 5 endpoints
+        fanInfo = SG.scenarios.map(function (sc, i) {
+          return {label: sc.label, end: conv(ends[i]), trade: trades[i] * 100 * k,
+                  shock: shocks[i]};
+        });
+        traces.push({
+          type: 'scatter', mode: 'markers', name: 'Scenario endpoint',
+          x: fanInfo.map(() => x1), y: fanInfo.map(f => f.end),
+          marker: {size: 8, color: fanInfo.map(f =>
+            f.trade > 0 ? C.pos : (f.trade < 0 ? C.neg : C.mid)),
+            line: {width: 2, color: surf}},
+          customdata: fanInfo.map(f =>
+            'If ' + (driver === SG.indep_key ? asset : driver) + ' ' + f.label +
+            (f.shock == null ? '' :
+              ' (' + (f.shock >= 0 ? '+' : '-') + Math.abs(f.shock * 100).toFixed(1) + '%)') +
+            '<br>Cumulative endpoint ' + fmtVal(f.end) + ' (trade ' + fmtVal(f.trade) + ')'),
+          hovertemplate: '%{customdata}<extra></extra>',
+        });
+      }
+    }
+
+    const yTitle = mode === 'pctile'
+      ? 'Cumulative net trade percentile (' + (method === 'rolling' ? 'last ' + win + 'w' : 'Expanding') + ')'
+      : 'Cumulative net trade, ' + (unit === 'usd' ? '$BN' : 'pp');
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink}, margin: {l: 70, r: 96, t: 16, b: 46},
+      height: 440, hovermode: 'x unified', dragmode: 'zoom',
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'left', x: 0,
+               bgcolor: 'rgba(0,0,0,0)', font: {color: ink, size: 11}},
+      xaxis: {type: 'date', showgrid: false, zeroline: false, linecolor: bl,
+              linewidth: 1, tickcolor: bl, tickfont: {color: muted, size: 11}},
+      yaxis: {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: true,
+              zerolinecolor: bl, zerolinewidth: 1, showline: false,
+              tickformat: mode === 'pctile' ? ',.0f' : '+,.0f',
+              ticksuffix: mode === 'pctile' ? '%' : (unit === 'usd' ? '' : 'pp'),
+              range: mode === 'pctile' ? [0, 100] : undefined,
+              title: {text: yTitle, font: {color: muted, size: 11}},
+              tickfont: {color: muted, size: 11}},
+      shapes: last >= 0 ? [{
+        type: 'line', xref: 'x', yref: 'paper',
+        x0: EG.dates[last], x1: EG.dates[last], y0: 0, y1: 1,
+        line: {color: strong, width: 1, dash: 'dot'},
+      }] : [],
+      annotations: last >= 0 ? [{
+        x: EG.dates[last], y: 1, xref: 'x', yref: 'paper',
+        text: 'Current', showarrow: false, xanchor: 'right', yanchor: 'bottom',
+        font: {color: muted, size: 10},
+      }, {
+        x: fanX, y: 1, xref: 'x', yref: 'paper',
+        text: 'Next week', showarrow: false, xanchor: 'center', yanchor: 'bottom',
+        font: {color: muted, size: 10},
+      }] : [],
+    };
+    if (xRange) { layout.xaxis.range = xRange; layout.xaxis.autorange = false; }
+    el.style.height = layout.height + 'px';
+    Plotly.react(el, traces, layout,
+                 {responsive: true, displayModeBar: false, locale: 'en'})
+      .then(() => { try { Plotly.Plots.resize(el); } catch (e) {} });
+
+    // Table: current value + endpoint per scenario
+    const curTxt = last >= 0 ? fmtVal(shown[last]) : '-';
+    tbl.innerHTML =
+      '<p class="muted">' + asset + ' ' + DOT + ' ' + (SG.names[asset] || asset) +
+      ': current cumulative <b>' + curTxt + '</b>' +
+      (last >= 0 ? ' (' + EG.dates[last] + ')' : '') + '</p>' +
+      (fanInfo.length
+        ? '<table class="data-table"><thead><tr><th>Scenario</th>' +
+          '<th>Assumed move</th><th>Realized this week</th>' +
+          '<th>Next week trade</th><th>Cumulative endpoint</th></tr></thead><tbody>' +
+          fanInfo.map(f => '<tr><th>' + f.label + '</th><td>' +
+            (f.shock == null ? '-'
+              : (f.shock >= 0 ? '+' : '-') + Math.abs(f.shock * 100).toFixed(2) + '%') +
+            // Put the move that has actually already occurred right next to the scenario assumption (same value in every row)
+            '</td><td>' + (wtdText(asset) == null ? '-' : wtdText(asset)) +
+            '</td><td>' + fmtVal(f.trade) + '</td><td>' + fmtVal(f.end) +
+            '</td></tr>').join('') + '</tbody></table>' +
+          '<p class="muted" style="font-size:11.5px">Realized this week = based on ' + wtdWindow() +
+          '</p>'
+        : '<p class="muted">Scenarios cannot be computed.</p>');
+  }
+
+  aSel.addEventListener('change', function () { asset = aSel.value; redraw(); });
+  dSel.addEventListener('change', function () { driver = dSel.value; redraw(); });
+  wSel.addEventListener('change', function () { win = parseInt(wSel.value, 10); redraw(); });
+  [['cfView', v => view = v], ['cfMethod', v => method = v]].forEach(function (spec) {
+    const bar = document.getElementById(spec[0]);
+    bar.querySelectorAll('.ubtn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        bar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+        spec[1](b.dataset.opt); redraw();
+      });
+    });
+  });
+
+  window.__cumFlowRedraw = redraw;
+  requestAnimationFrame(redraw);
+})();
+
+// ---- exposure change by period ----
+// "How much has the current position grown vs the past". Several periods are placed
+// side by side to compare recent and long-term change on one screen.
+// This is a pp difference, not a ratio (%): positions are signed, so a ratio explodes
+// when it crosses 0 (measured: JY went from +0.6% to -32.1%, which is -5,665% as a ratio).
+(function initExpoChange() {
+  if (!EG) return;
+  const el = document.getElementById('chart-expochg');
+  const tbl = document.getElementById('table-expochg');
+  const pbar = document.getElementById('ecPeriods');
+  if (!el || !pbar) return;
+
+  const PERIODS = [
+    {key: '1M', label: '1M', months: 1},
+    {key: '3M', label: '3M', months: 3},
+    {key: '6M', label: '6M', months: 6},
+    {key: 'YTD', label: 'YTD', ytd: true},
+    {key: '1Y', label: '1Y', months: 12},
+    {key: '3Y', label: '3Y', months: 36},
+  ];
+  const on = new Set(['1M', 'YTD', '1Y']);        // default selection
+  // Unlike time series, a bar chart has little reason to mix 'asset classes + detail of one asset class'.
+  // So instead of per-asset-class expansion it is a two-way choice (expansion state management disappears).
+  let ecLevel = 'sector';                        // 'sector' | 'asset'
+
+  PERIODS.forEach(function (p) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ubtn' + (on.has(p.key) ? ' on' : '');
+    b.dataset.opt = p.key;
+    b.textContent = p.label;
+    pbar.appendChild(b);
+  });
+
+  const DOT = String.fromCharCode(0xB7);
+  const last = EG.dates.length - 1;
+
+  // Base point index: the last observation at or before that point
+  function baseIdx(p) {
+    if (last < 0) return null;
+    const d = EG.dates[last];
+    let target;
+    if (p.ytd) {
+      // Year start basis = last observation of the prior year. If data starts this year, fall back to the first observation.
+      target = (parseInt(d.slice(0, 4), 10) - 1) + '-12-31';
+    } else {
+      const y = parseInt(d.slice(0, 4), 10);
+      const m = parseInt(d.slice(5, 7), 10) - 1 - p.months;
+      const day = d.slice(8, 10);
+      const yy = y + Math.floor(m / 12);
+      const mm = ((m % 12) + 12) % 12 + 1;
+      target = yy + '-' + String(mm).padStart(2, '0') + '-' + day;
+    }
+    for (let i = last; i >= 0; i--) {
+      if (EG.dates[i] <= target) return i;
+    }
+    return 0;                                  // if the period is longer than the data, use the start
+  }
+
+  function seriesOf(name, isSector) {
+    return isSector ? (EG.sector_series[name] || []) : (EG.market_series[name] || []);
+  }
+  function change(name, isSector, p) {
+    const b = baseIdx(p);
+    if (b == null) return null;
+    const s = seriesOf(name, isSector);
+    const a = s[last], z = s[b];
+    if (a == null || z == null) return null;
+    return (a - z) * 100;
+  }
+
+  function entities() {
+    const out = [];
+    // Selecting a global asset class drills down to that asset class's markets (asset class totals only under All)
+    const lvl = SECTOR === 'ALL' ? ecLevel : 'asset';
+    EG.sectors.forEach(function (s) {
+      if (SECTOR !== 'ALL' && s !== SECTOR) return;
+      if (lvl === 'sector') { out.push({name: s, sector: true}); return; }
+      (EG.members[s] || []).forEach(function (c) {
+        out.push({name: c, sector: false, parent: s});
+      });
+    });
+    return out;
+  }
+
+  function redraw() {
+    const th = currentTheme();
+    const dark = th === 'dark';
+    const ink = dark ? '#c3c2b7' : '#52514e';
+    const muted = '#898781';
+    const gl = dark ? '#2c2c2a' : '#e1e0d9';
+    const bl = dark ? '#383835' : '#c3c2b7';
+    const surf = dark ? '#1a1a19' : '#fcfcfb';
+    const pal = EG.slot_colors[th] || EG.slot_colors.light;
+
+    const ents = entities();
+    const sel = PERIODS.filter(p => on.has(p.key));
+    const xs = ents.map(e => e.sector ? e.name : e.name + ' ' + DOT + ' ' +
+                             (EG.names[e.name] || e.name));
+
+    const traces = sel.map(function (p, i) {
+      const vals = ents.map(e => change(e.name, e.sector, p));
+      const b = baseIdx(p);
+      return {
+        type: 'bar', name: p.label + ' (vs ' + (b == null ? '?' : EG.dates[b]) + ')',
+        x: xs, y: vals,
+        marker: {color: pal[i % pal.length], line: {width: 2, color: surf}},
+        hovertemplate: '%{x}<br>' + p.label + ' %{y:+.1f}pp<extra></extra>',
+      };
+    });
+
+    const wide = ents.length > 6;
+    const layout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {size: 12, color: ink},
+      margin: {l: 66, r: 24, t: 16, b: wide ? 118 : 52},
+      height: wide ? 500 : 430, barmode: 'group', bargap: 0.28,
+      hovermode: 'closest', dragmode: false,
+      hoverlabel: {bgcolor: surf, bordercolor: bl, font: {color: ink}},
+      legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'left', x: 0,
+               bgcolor: 'rgba(0,0,0,0)', font: {color: ink, size: 11}},
+      xaxis: {type: 'category', showgrid: false, zeroline: false, linecolor: bl,
+              linewidth: 1, tickcolor: bl, tickangle: wide ? -45 : 0,
+              tickfont: {color: muted, size: 11}},
+      yaxis: {showgrid: true, gridcolor: gl, gridwidth: 1, zeroline: true,
+              zerolinecolor: bl, zerolinewidth: 1, showline: false,
+              tickformat: '+,.0f', ticksuffix: 'pp',
+              title: {text: 'Exposure change, pp  (+ increase / ' +
+                            String.fromCharCode(0x2212) + ' decrease)',
+                      font: {color: muted, size: 11}},
+              tickfont: {color: muted, size: 11}},
+    };
+    el.style.height = layout.height + 'px';
+    Plotly.react(el, traces, layout,
+                 {responsive: true, displayModeBar: false, locale: 'en'})
+      .then(() => { try { Plotly.Plots.resize(el); } catch (e) {} });
+
+    tbl.innerHTML = ents.length
+      ? '<table class="data-table"><thead><tr><th></th><th>Current</th>' +
+        sel.map(p => '<th>' + p.label + '</th>').join('') + '</tr></thead><tbody>' +
+        ents.map(function (e, k) {
+          const s = seriesOf(e.name, e.sector);
+          const cur = s[last];
+          return '<tr><th>' + xs[k] + '</th><td>' +
+            (cur == null ? '-' : (cur >= 0 ? '+' : '') + (cur * 100).toFixed(1) + '%') +
+            '</td>' + sel.map(function (p) {
+              const v = change(e.name, e.sector, p);
+              return '<td>' + (v == null ? '-' : (v >= 0 ? '+' : '') + v.toFixed(1) + 'pp') + '</td>';
+            }).join('') + '</tr>';
+        }).join('') + '</tbody></table>' +
+        '<p class="muted" style="font-size:11.5px">Base dates: ' +
+        sel.map(function (p) {
+          const b = baseIdx(p);
+          return p.label + ' ' + (b == null ? '?' : EG.dates[b]);
+        }).join(' · ') + '</p>'
+      : '<p class="muted">No items to show.</p>';
+  }
+
+  pbar.addEventListener('click', function (e) {
+    const b = e.target.closest('.ubtn');
+    if (!b) return;
+    const k = b.dataset.opt;
+    if (on.has(k)) { if (on.size === 1) return; on.delete(k); } else { on.add(k); }
+    b.classList.toggle('on', on.has(k));
+    redraw();
+  });
+
+  (function () {
+    const bar = document.getElementById('ecLevel');
+    bar.querySelectorAll('.ubtn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        bar.querySelectorAll('.ubtn').forEach(x => x.classList.toggle('on', x === b));
+        ecLevel = b.dataset.opt; redraw();
+      });
+    });
+  })();
+
+  window.__expoChgRedraw = redraw;
+  requestAnimationFrame(redraw);
+})();
+
+// ---- theme toggle ----
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('cta-theme', next); } catch (e) {}
+  rerenderAll();
+  // Directly drawn charts are refreshed separately
+  if (window.__expoRedraw) window.__expoRedraw();
+  if (window.__expoChgRedraw) window.__expoChgRedraw();
+  if (window.__scenRedraw) window.__scenRedraw();
+});
+
+// Respect the OS setting (a saved choice takes priority)
+(function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('cta-theme'); } catch (e) {}
+  if (saved) {
+    document.documentElement.setAttribute('data-theme', saved);
+  } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+
+// ---- right click -> CSV export ----
+// Right-clicking a chart or table opens a small menu. It runs entirely in the browser,
+// so no server or extra library is needed.
+//
+// Arrays in baked charts are base64 binary (`{dtype, bdata}`), so the original CHARTS
+// cannot be read directly. Reading from `el.data` after render works, because Plotly
+// has already decoded it into plain number arrays.
+(function initExport() {
+  const NL = String.fromCharCode(10);
+
+  function cell(v) {
+    if (v == null) return '';
+    let s = String(v);
+    if (s.indexOf('"') >= 0) s = s.replace(/"/g, '""');
+    return /[",\n]/.test(s) ? '"' + s + '"' : s;
+  }
+  function toCsv(rows) {
+    return rows.map(r => r.map(cell).join(',')).join(NL);
+  }
+  function download(name, csv) {
+    // Prepend a BOM so Excel recognizes the file as UTF-8 (otherwise non-ASCII text is garbled)
+    const blob = new Blob([String.fromCharCode(0xFEFF) + csv],
+                          {type: 'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+  function slug(t) {
+    return (t || 'chart').trim().replace(/\s+/g, '_')
+      .replace(/[\\/:*?"<>|]/g, '').slice(0, 60);
+  }
+  function cardTitle(node) {
+    const card = node.closest('.card');
+    const h = card && card.querySelector('h2');
+    return h ? h.textContent : 'export';
+  }
+  const fmtX = v => (v instanceof Date) ? v.toISOString().slice(0, 10) : v;
+
+  // ---- Plotly chart -> matrix ----
+  // Heatmaps (z grid) and everything else (x/y series) are handled separately.
+  function chartRows(gd) {
+    const data = (gd && gd.data) || [];
+    if (!data.length) return null;
+
+    const heat = data.find(t => t.type === 'heatmap');
+    if (heat) {
+      const rows = [['y \\ x'].concat((heat.x || []).map(fmtX))];
+      (heat.y || []).forEach(function (yv, i) {
+        rows.push([yv].concat(Array.from((heat.z || [])[i] || [])));
+      });
+      return rows;
+    }
+
+    // For horizontal bars x is the value and y is the item (orientation === 'h')
+    const keyOf = t => Array.from((t.orientation === 'h' ? t.y : t.x) || []).map(fmtX);
+    const valOf = t => Array.from((t.orientation === 'h' ? t.x : t.y) || []);
+
+    const keys = [];
+    const seen = {};
+    data.forEach(function (t) {
+      keyOf(t).forEach(function (k) {
+        if (!(k in seen)) { seen[k] = keys.length; keys.push(k); }
+      });
+    });
+    const header = ['key'].concat(data.map((t, i) => t.name || ('series' + (i + 1))));
+    const rows = keys.map(k => [k].concat(data.map(() => '')));
+    data.forEach(function (t, ti) {
+      const ks = keyOf(t), vs = valOf(t);
+      ks.forEach(function (k, i) { rows[seen[k]][ti + 1] = vs[i]; });
+    });
+    return [header].concat(rows);
+  }
+
+  function tableRows(node) {
+    const t = node.matches('table') ? node : node.querySelector('table');
+    if (!t) return null;
+    return Array.from(t.rows).map(r =>
+      Array.from(r.cells).map(c => c.textContent.trim()));
+  }
+
+  // ---- context menu ----
+  let menu = null;
+  function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+  document.addEventListener('click', closeMenu);
+  document.addEventListener('scroll', closeMenu, true);
+  window.addEventListener('resize', closeMenu);
+
+  function openMenu(x, y, items) {
+    closeMenu();
+    menu = document.createElement('div');
+    menu.className = 'ctxmenu';
+    items.forEach(function (it) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it[0];
+      b.addEventListener('click', function (e) { e.stopPropagation(); closeMenu(); it[1](); });
+      menu.appendChild(b);
+    });
+    menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
+    menu.style.top = Math.min(y, window.innerHeight - 90) + 'px';
+    document.body.appendChild(menu);
+  }
+
+  document.addEventListener('contextmenu', function (e) {
+    const chart = e.target.closest('.chart');
+    const table = e.target.closest('.tablewrap, table.data-table');
+    if (!chart && !table) return;          // elsewhere, leave the default menu alone
+    e.preventDefault();
+
+    const items = [];
+    if (chart) {
+      const title = cardTitle(chart);
+      items.push(['Export as CSV', function () {
+        const rows = chartRows(chart);
+        if (!rows) { alert('No data to export.'); return; }
+        download(slug(title) + '.csv', toCsv(rows));
+      }]);
+      items.push(['Save as PNG', function () {
+        try {
+          Plotly.downloadImage(chart, {format: 'png', scale: 2,
+                                       filename: slug(title)});
+        } catch (err) { alert('Could not save the image: ' + err.message); }
+      }]);
+    }
+    if (table) {
+      const title = cardTitle(table);
+      items.push(['Export table as CSV', function () {
+        const rows = tableRows(table);
+        if (!rows) { alert('Table not found.'); return; }
+        download(slug(title) + '_table.csv', toCsv(rows));
+      }]);
+    }
+    openMenu(e.clientX, e.clientY, items);
+  });
+})();
+
+// The initial render also waits until the frame after layout finishes. Web font loading
+// can change widths, so settle once more after fonts are ready.
+requestAnimationFrame(() => {
+  const active = document.querySelector('.panel.active');
+  settleCharts(active);
+  requestAnimationFrame(() => settleCharts(active));
+});
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() =>
+    settleCharts(document.querySelector('.panel.active')));
+}
+</script>
+</body>
+</html>
